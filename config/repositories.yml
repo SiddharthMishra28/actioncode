@@ -3,7 +3,7 @@ repositories:
     fullName: SiddharthMishra28/actioncode
     defaultBranch: main
     allowedUsers:
-      - 0  # Replace with actual Telegram user IDs
+      - 0  # Replace with your Telegram user ID from @userinfobot
     enabledCommands:
       - fix
       - add
