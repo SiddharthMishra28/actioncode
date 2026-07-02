@@ -1,0 +1,439 @@
+name: OpenCode AI Agent
+
+on:
+  workflow_dispatch:
+    inputs:
+      repository:
+        description: 'Target repository (owner/repo)'
+        required: true
+        type: string
+      branch:
+        description: 'Target branch'
+        required: true
+        type: string
+        default: 'main'
+      instruction:
+        description: 'AI instruction'
+        required: true
+        type: string
+      telegram_chat_id:
+        description: 'Telegram chat ID for notifications'
+        required: true
+        type: string
+      telegram_user:
+        description: 'Telegram user who initiated the request'
+        required: true
+        type: string
+      request_id:
+        description: 'Unique request ID'
+        required: true
+        type: string
+      priority:
+        description: 'Request priority'
+        required: false
+        type: choice
+        options:
+          - low
+          - medium
+          - high
+          - critical
+        default: 'medium'
+      model:
+        description: 'AI model to use'
+        required: false
+        type: string
+        default: 'opencode/free-model'
+      execution_mode:
+        description: 'Execution mode'
+        required: false
+        type: choice
+        options:
+          - full
+          - dry-run
+          - analysis-only
+        default: 'full'
+
+env:
+  TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+  OPENCODE_MODEL: ${{ inputs.model }}
+  REQUEST_ID: ${{ inputs.request_id }}
+  TARGET_REPO: ${{ inputs.repository }}
+  TARGET_BRANCH: ${{ inputs.branch }}
+  INSTRUCTION: ${{ inputs.instruction }}
+
+jobs:
+  execute:
+    name: Execute AI Agent
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    
+    steps:
+      - name: Send Progress - Accepted
+        uses: appleboy/telegram-action@v1.0.0
+        with:
+          token: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          chat_id: ${{ inputs.telegram_chat_id }}
+          message: |
+            🟢 *Request Accepted*
+            
+            Request ID: `${{ inputs.request_id }}`
+            Repository: `${{ inputs.repository }}`
+            Branch: `${{ inputs.branch }}`
+            Command: ${{ inputs.instruction }}
+            
+            ⏳ Starting execution...
+
+      - name: Checkout Target Repository
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ inputs.repository }}
+          ref: ${{ inputs.branch }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+
+      - name: Send Progress - Checkout Complete
+        uses: appleboy/telegram-action@v1.0.0
+        with:
+          token: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          chat_id: ${{ inputs.telegram_chat_id }}
+          message: "📥 Repository Checked Out"
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install OpenCode
+        run: |
+          npm install -g opencode
+          echo "OpenCode installed successfully"
+
+      - name: Configure OpenCode
+        run: |
+          mkdir -p ~/.opencode
+          cat > ~/.opencode/config.json << 'EOF'
+          {
+            "model": "${{ env.OPENCODE_MODEL }}",
+            "autoApprove": true,
+            "nonInteractive": true,
+            "verbose": true
+          }
+          EOF
+
+      - name: Send Progress - Analysis Starting
+        uses: appleboy/telegram-action@v1.0.0
+        with:
+          token: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          chat_id: ${{ inputs.telegram_chat_id }}
+          message: "🧠 Repository Analysis Starting..."
+
+      - name: Analyze Repository
+        id: analyze
+        run: |
+          echo "Analyzing repository structure..."
+          
+          # Detect build system
+          if [ -f "pom.xml" ]; then
+            echo "BUILD_SYSTEM=maven" >> $GITHUB_OUTPUT
+            echo "BUILD_CMD=mvn clean package -DskipTests" >> $GITHUB_OUTPUT
+            echo "TEST_CMD=mvn test" >> $GITHUB_OUTPUT
+          elif [ -f "build.gradle" ] || [ -f "build.gradle.kts" ]; then
+            echo "BUILD_SYSTEM=gradle" >> $GITHUB_OUTPUT
+            echo "BUILD_CMD=./gradlew build -x test" >> $GITHUB_OUTPUT
+            echo "TEST_CMD=./gradlew test" >> $GITHUB_OUTPUT
+          elif [ -f "package.json" ]; then
+            echo "BUILD_SYSTEM=npm" >> $GITHUB_OUTPUT
+            echo "BUILD_CMD=npm run build" >> $GITHUB_OUTPUT
+            echo "TEST_CMD=npm test" >> $GITHUB_OUTPUT
+          elif [ -f "go.mod" ]; then
+            echo "BUILD_SYSTEM=go" >> $GITHUB_OUTPUT
+            echo "BUILD_CMD=go build ./..." >> $GITHUB_OUTPUT
+            echo "TEST_CMD=go test ./..." >> $GITHUB_OUTPUT
+          elif [ -f "Cargo.toml" ]; then
+            echo "BUILD_SYSTEM=rust" >> $GITHUB_OUTPUT
+            echo "BUILD_CMD=cargo build --release" >> $GITHUB_OUTPUT
+            echo "TEST_CMD=cargo test" >> $GITHUB_OUTPUT
+          elif [ -f "requirements.txt" ] || [ -f "pyproject.toml" ]; then
+            echo "BUILD_SYSTEM=python" >> $GITHUB_OUTPUT
+            echo "BUILD_CMD=python -m build" >> $GITHUB_OUTPUT
+            echo "TEST_CMD=python -m pytest" >> $GITHUB_OUTPUT
+          else
+            echo "BUILD_SYSTEM=unknown" >> $GITHUB_OUTPUT
+            echo "BUILD_CMD=" >> $GITHUB_OUTPUT
+            echo "TEST_CMD=" >> $GITHUB_OUTPUT
+          fi
+          
+          # Get file statistics
+          TOTAL_FILES=$(find . -type f -not -path '*/node_modules/*' -not -path '*/.git/*' | wc -l)
+          echo "TOTAL_FILES=$TOTAL_FILES" >> $GITHUB_OUTPUT
+          
+          echo "Repository analysis complete"
+
+      - name: Send Progress - Analysis Complete
+        uses: appleboy/telegram-action@v1.0.0
+        with:
+          token: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          chat_id: ${{ inputs.telegram_chat_id }}
+          message: |
+            🧠 *Repository Analysis Complete*
+            
+            Build System: ${{ steps.analyze.outputs.BUILD_SYSTEM }}
+            Total Files: ${{ steps.analyze.outputs.TOTAL_FILES }}
+
+      - name: Execute OpenCode
+        id: opencode
+        if: inputs.execution_mode == 'full'
+        run: |
+          echo "Executing OpenCode with instruction: ${{ env.INSTRUCTION }}"
+          
+          # Create a temporary file with the instruction
+          echo "${{ env.INSTRUCTION }}" > /tmp/instruction.txt
+          
+          # Execute OpenCode
+          opencode \
+            --model "${{ env.OPENCODE_MODEL }}" \
+            --instruction "$(cat /tmp/instruction.txt)" \
+            --non-interactive \
+            --auto-approve \
+            --verbose \
+            2>&1 | tee /tmp/opencode-output.txt
+          
+          # Check if OpenCode succeeded
+          if [ $? -eq 0 ]; then
+            echo "SUCCESS=true" >> $GITHUB_OUTPUT
+          else
+            echo "SUCCESS=false" >> $GITHUB_OUTPUT
+          fi
+          
+          # Get modified files
+          MODIFIED_FILES=$(git diff --name-only 2>/dev/null || echo "")
+          echo "MODIFIED_FILES<<EOF" >> $GITHUB_OUTPUT
+          echo "$MODIFIED_FILES" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Send Progress - Code Modification
+        uses: appleboy/telegram-action@v1.0.0
+        if: inputs.execution_mode == 'full'
+        with:
+          token: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          chat_id: ${{ inputs.telegram_chat_id }}
+          message: "✍️ Code Modification Complete"
+
+      - name: Build Project
+        id: build
+        if: inputs.execution_mode == 'full' && steps.opencode.outputs.SUCCESS == 'true'
+        run: |
+          echo "Building project..."
+          
+          BUILD_CMD="${{ steps.analyze.outputs.BUILD_CMD }}"
+          if [ -n "$BUILD_CMD" ]; then
+            eval "$BUILD_CMD" 2>&1 | tee /tmp/build-output.txt
+            
+            if [ ${PIPESTATUS[0]} -eq 0 ]; then
+              echo "BUILD_SUCCESS=true" >> $GITHUB_OUTPUT
+            else
+              echo "BUILD_SUCCESS=false" >> $GITHUB_OUTPUT
+            fi
+          else
+            echo "No build command detected, skipping build"
+            echo "BUILD_SUCCESS=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Send Progress - Build Complete
+        uses: appleboy/telegram-action@v1.0.0
+        if: inputs.execution_mode == 'full'
+        with:
+          token: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          chat_id: ${{ inputs.telegram_chat_id }}
+          message: |
+            🔨 *Build Complete*
+            
+            Status: ${{ steps.build.outputs.BUILD_SUCCESS == 'true' && '✅ Passed' || '❌ Failed' }}
+
+      - name: Run Tests
+        id: test
+        if: inputs.execution_mode == 'full' && steps.build.outputs.BUILD_SUCCESS == 'true'
+        run: |
+          echo "Running tests..."
+          
+          TEST_CMD="${{ steps.analyze.outputs.TEST_CMD }}"
+          if [ -n "$TEST_CMD" ]; then
+            eval "$TEST_CMD" 2>&1 | tee /tmp/test-output.txt
+            
+            if [ ${PIPESTATUS[0]} -eq 0 ]; then
+              echo "TEST_SUCCESS=true" >> $GITHUB_OUTPUT
+            else
+              echo "TEST_SUCCESS=false" >> $GITHUB_OUTPUT
+            fi
+            
+            # Extract test results (simplified)
+            PASSED=$(grep -oP '\d+ passed' /tmp/test-output.txt | grep -oP '\d+' || echo "0")
+            FAILED=$(grep -oP '\d+ failed' /tmp/test-output.txt | grep -oP '\d+' || echo "0")
+            echo "PASSED=$PASSED" >> $GITHUB_OUTPUT
+            echo "FAILED=$FAILED" >> $GITHUB_OUTPUT
+          else
+            echo "No test command detected, skipping tests"
+            echo "TEST_SUCCESS=true" >> $GITHUB_OUTPUT
+            echo "PASSED=0" >> $GITHUB_OUTPUT
+            echo "FAILED=0" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Send Progress - Tests Complete
+        uses: appleboy/telegram-action@v1.0.0
+        if: inputs.execution_mode == 'full'
+        with:
+          token: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          chat_id: ${{ inputs.telegram_chat_id }}
+          message: |
+            🧪 *Tests Complete*
+            
+            Passed: ${{ steps.test.outputs.PASSED || '0' }}
+            Failed: ${{ steps.test.outputs.FAILED || '0' }}
+
+      - name: Create Branch and Commit
+        id: commit
+        if: inputs.execution_mode == 'full' && steps.build.outputs.BUILD_SUCCESS == 'true'
+        run: |
+          # Configure git
+          git config user.name "ActionCode Bot"
+          git config user.email "actioncode@bot.github.com"
+          
+          # Create a new branch
+          BRANCH_NAME="ai/${{ env.REQUEST_ID }}"
+          git checkout -b "$BRANCH_NAME"
+          
+          # Stage changes
+          git add -A
+          
+          # Check if there are changes to commit
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+            echo "COMMIT_SHA=" >> $GITHUB_OUTPUT
+            echo "BRANCH_NAME=" >> $GITHUB_OUTPUT
+          else
+            # Commit changes
+            git commit -m "AI: ${{ env.INSTRUCTION }}" -m "Generated by ActionCode Bot" -m "Request ID: ${{ env.REQUEST_ID }}"
+            
+            # Push to remote
+            git push origin "$BRANCH_NAME"
+            
+            COMMIT_SHA=$(git rev-parse HEAD)
+            echo "COMMIT_SHA=$COMMIT_SHA" >> $GITHUB_OUTPUT
+            echo "BRANCH_NAME=$BRANCH_NAME" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create Pull Request
+        id: pr
+        if: inputs.execution_mode == 'full' && steps.commit.outputs.COMMIT_SHA != ''
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const instruction = `${{ env.INSTRUCTION }}`;
+            const requestId = `${{ env.REQUEST_ID }}`;
+            const branch = `${{ steps.commit.outputs.BRANCH_NAME }}`;
+            const commitSha = `${{ steps.commit.outputs.COMMIT_SHA }}`;
+            const buildSuccess = `${{ steps.build.outputs.BUILD_SUCCESS }}` === 'true';
+            const testSuccess = `${{ steps.test.outputs.TEST_SUCCESS }}` === 'true';
+            const passed = `${{ steps.test.outputs.PASSED || '0' }}`;
+            const failed = `${{ steps.test.outputs.FAILED || '0' }}`;
+            const modifiedFiles = `${{ steps.opencode.outputs.MODIFIED_FILES || '' }}`;
+            
+            const body = [
+              '## Summary',
+              '',
+              `This PR was generated by ActionCode Bot based on the instruction:`,
+              '',
+              `> ${instruction}`,
+              '',
+              '## Changes',
+              '',
+              modifiedFiles ? modifiedFiles.split('\n').filter(f => f.trim()).map(f => `- \`${f}\``).join('\n') : '- No files modified',
+              '',
+              '## Build Status',
+              '',
+              `- Build: ${buildSuccess ? '✅ Passed' : '❌ Failed'}`,
+              `- Tests: ${testSuccess ? '✅ Passed' : '❌ Failed'}`,
+              testSuccess ? `- Passed: ${passed}` : '',
+              testSuccess ? `- Failed: ${failed}` : '',
+              '',
+              '## Request Details',
+              '',
+              `- Request ID: \`${requestId}\``,
+              `- Commit: \`${commitSha}\``,
+              `- Model: ${{ env.OPENCODE_MODEL }}`,
+              '',
+              '---',
+              '',
+              '*Generated by ActionCode Bot*',
+            ].filter(Boolean).join('\n');
+            
+            const { data: pr } = await github.rest.pulls.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `AI: ${instruction}`,
+              body: body,
+              head: branch,
+              base: '${{ inputs.branch }}',
+            });
+            
+            // Add labels
+            await github.rest.issues.addLabels({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: pr.number,
+              labels: ['ai-generated', 'automated'],
+            });
+            
+            core.setOutput('PR_NUMBER', pr.number);
+            core.setOutput('PR_URL', pr.html_url);
+
+      - name: Send Progress - PR Created
+        uses: appleboy/telegram-action@v1.0.0
+        if: inputs.execution_mode == 'full' && steps.pr.outputs.PR_URL
+        with:
+          token: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          chat_id: ${{ inputs.telegram_chat_id }}
+          message: |
+            🚀 *Pull Request Created*
+            
+            PR: #${{ steps.pr.outputs.PR_NUMBER }}
+            URL: ${{ steps.pr.outputs.PR_URL }}
+
+      - name: Send Completion Message
+        uses: appleboy/telegram-action@v1.0.0
+        if: always()
+        with:
+          token: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          chat_id: ${{ inputs.telegram_chat_id }}
+          message: |
+            ${{ steps.commit.outputs.COMMIT_SHA && '✅' || '❌' }} *Request ${{ steps.commit.outputs.COMMIT_SHA && 'Complete' || 'Failed' }}*
+            
+            Repository: `${{ inputs.repository }}`
+            Branch: `${{ inputs.branch }}`
+            ${{ steps.commit.outputs.COMMIT_SHA && format('Commit: `{0}`', steps.commit.outputs.COMMIT_SHA) || '' }}
+            Build: ${{ steps.build.outputs.BUILD_SUCCESS == 'true' && 'Passed' || 'Failed' }}
+            Tests: ${{ steps.test.outputs.PASSED || '0' }} Passed
+            Files Modified: ${{ steps.opencode.outputs.MODIFIED_FILES && steps.opencode.outputs.MODIFIED_FILES != '' && 'Yes' || 'No' }}
+            ${{ steps.pr.outputs.PR_URL && format('PR: [View Pull Request]({0})', steps.pr.outputs.PR_URL) || '' }}
+            
+            Workflow: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+      - name: Upload Logs
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: execution-logs-${{ inputs.request_id }}
+          path: |
+            /tmp/opencode-output.txt
+            /tmp/build-output.txt
+            /tmp/test-output.txt
+          retention-days: 7
+
+      - name: Cleanup
+        if: always()
+        run: |
+          rm -f /tmp/instruction.txt
+          rm -f /tmp/opencode-output.txt
+          rm -f /tmp/build-output.txt
+          rm -f /tmp/test-output.txt

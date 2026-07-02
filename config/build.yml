@@ -1,0 +1,146 @@
+build:
+  # Build detection configuration
+  detection:
+    # Supported build systems
+    buildSystems:
+      - name: maven
+        files:
+          - pom.xml
+        buildCommand: "mvn clean package -DskipTests"
+        testCommand: "mvn test"
+        installCommand: "mvn install -DskipTests"
+      
+      - name: gradle
+        files:
+          - build.gradle
+          - build.gradle.kts
+        buildCommand: "./gradlew build -x test"
+        testCommand: "./gradlew test"
+        installCommand: "./gradlew build -x test"
+      
+      - name: npm
+        files:
+          - package.json
+        buildCommand: "npm run build"
+        testCommand: "npm test"
+        installCommand: "npm install"
+      
+      - name: yarn
+        files:
+          - yarn.lock
+        buildCommand: "yarn build"
+        testCommand: "yarn test"
+        installCommand: "yarn install"
+      
+      - name: pnpm
+        files:
+          - pnpm-lock.yaml
+        buildCommand: "pnpm build"
+        testCommand: "pnpm test"
+        installCommand: "pnpm install"
+      
+      - name: python
+        files:
+          - setup.py
+          - pyproject.toml
+          - requirements.txt
+        buildCommand: "python -m build"
+        testCommand: "python -m pytest"
+        installCommand: "pip install -r requirements.txt"
+      
+      - name: go
+        files:
+          - go.mod
+        buildCommand: "go build ./..."
+        testCommand: "go test ./..."
+        installCommand: "go mod download"
+      
+      - name: rust
+        files:
+          - Cargo.toml
+        buildCommand: "cargo build --release"
+        testCommand: "cargo test"
+        installCommand: "cargo fetch"
+      
+      - name: docker
+        files:
+          - Dockerfile
+        buildCommand: "docker build -t app ."
+        testCommand: ""
+        installCommand: ""
+      
+      - name: docker-compose
+        files:
+          - docker-compose.yml
+          - docker-compose.yaml
+        buildCommand: "docker-compose build"
+        testCommand: ""
+        installCommand: ""
+    
+    # Framework detection
+    frameworks:
+      - name: spring-boot
+        indicators:
+          - "org.springframework.boot"
+          - "@SpringBootApplication"
+        buildProfile: "production"
+      
+      - name: nextjs
+        indicators:
+          - "next.config.js"
+          - "next.config.mjs"
+          - "@next/core-web-vitals"
+        buildCommand: "npm run build"
+        startCommand: "npm run start"
+      
+      - name: react
+        indicators:
+          - "react-scripts"
+          - "react-dom"
+        buildCommand: "npm run build"
+      
+      - name: vue
+        indicators:
+          - "vue-cli"
+          - "@vue/cli-service"
+        buildCommand: "npm run build"
+      
+      - name: express
+        indicators:
+          - "express"
+          - "@types/express"
+        startCommand: "npm run start"
+  
+  # Build optimization
+  optimization:
+    # Enable build caching
+    enableCache: true
+    
+    # Cache directories
+    cacheDirectories:
+      - node_modules
+      - .gradle
+      - .m2
+      - __pycache__
+      - target
+      - dist
+      - build
+    
+    # Parallel execution
+    parallelExecution: true
+    maxParallelJobs: 4
+  
+  # Build artifacts
+  artifacts:
+    # Enable artifact collection
+    enableCollection: true
+    
+    # Artifact directories
+    directories:
+      - dist
+      - build
+      - target
+      - out
+    
+    # Retention days
+    retentionDays: 7

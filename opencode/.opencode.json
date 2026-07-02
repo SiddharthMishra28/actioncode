@@ -1,0 +1,43 @@
+{
+  "model": "opencode/free-model",
+  "autoApprove": true,
+  "nonInteractive": true,
+  "verbose": true,
+  "maxTokens": 4096,
+  "temperature": 0.7,
+  "timeout": 300,
+  "retryAttempts": 3,
+  "retryDelay": 5000,
+  "features": {
+    "codeAnalysis": true,
+    "autoFormatting": true,
+    "testGeneration": true,
+    "documentationGeneration": true,
+    "refactoring": true,
+    "securityScanning": true
+  },
+  "exclusions": {
+    "directories": [
+      "node_modules",
+      ".git",
+      "dist",
+      "build",
+      "__pycache__",
+      ".venv",
+      "venv"
+    ],
+    "files": [
+      "*.log",
+      "*.lock",
+      "*.min.js",
+      "*.min.css",
+      "*.map"
+    ]
+  },
+  "prompts": {
+    "system": "You are an expert software engineer. You write clean, maintainable, and production-ready code. Follow SOLID principles, use proper design patterns, and ensure code is well-tested.",
+    "analysis": "Analyze the codebase thoroughly. Understand the architecture, dependencies, and patterns before making changes.",
+    "modification": "Make minimal, focused changes. Preserve existing code style and patterns. Add tests for new functionality.",
+    "review": "Review changes for correctness, performance, security, and maintainability. Ensure all tests pass."
+  }
+}

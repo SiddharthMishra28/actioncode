@@ -1,0 +1,49 @@
+limits:
+  # Request limits per user
+  perUser:
+    maxConcurrent: 3
+    maxDaily: 50
+    maxMonthly: 500
+  
+  # Request limits per repository
+  perRepository:
+    maxConcurrent: 10
+    maxDaily: 100
+    maxMonthly: 1000
+  
+  # Global limits
+  global:
+    maxConcurrent: 50
+    maxDaily: 1000
+    maxMonthly: 10000
+  
+  # Execution limits
+  execution:
+    maxRetries: 3
+    retryDelay: 5000
+    timeout: 1800000  # 30 minutes
+    maxBuildTime: 600000  # 10 minutes
+    maxTestTime: 600000  # 10 minutes
+  
+  # File limits
+  files:
+    maxModified: 50
+    maxAdded: 20
+    maxDeleted: 10
+    maxFileSize: 1048576  # 1MB
+  
+  # PR limits
+  pullRequest:
+    maxTitleLength: 256
+    maxBodyLength: 65536
+    maxFilesChanged: 100
+  
+  # Message limits
+  message:
+    maxLength: 4096
+    codeBlockMaxLength: 3000
+  
+  # Rate limiting
+  rateLimit:
+    windowMs: 60000  # 1 minute
+    maxRequests: 10

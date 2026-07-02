@@ -1,0 +1,65 @@
+telegram:
+  # Bot configuration
+  botToken: ${TELEGRAM_BOT_TOKEN}
+  webhookSecret: ${TELEGRAM_WEBHOOK_SECRET}
+  
+  # Allowed users (Telegram user IDs)
+  allowedUsers:
+    - 0  # Replace with actual Telegram user IDs
+  
+  # Bot behavior
+  behavior:
+    # Welcome message
+    welcomeMessage: |
+      Welcome to ActionCode! 🤖
+      
+      I'm an AI coding assistant that lives in GitHub.
+      Send me a command to get started.
+      
+      Available commands:
+      /fix - Fix bugs or issues
+      /add - Add new features
+      /refactor - Refactor code
+      /review - Review code changes
+      /explain - Explain code
+      /test - Run tests
+      /document - Generate documentation
+      /cleanup - Clean up code
+      /improve - Improve code quality
+      /run - Run custom instructions
+      /status - Check request status
+      /logs - Get execution logs
+      /cancel - Cancel a request
+      /help - Show this help message
+    
+    # Confirmation messages
+    confirmStart: "Start execution?"
+    confirmYes: "Yes"
+    confirmNo: "No"
+    
+    # Progress messages
+    progressAccepted: "🟢 Request Accepted"
+    progressCheckout: "📥 Repository Checked Out"
+    progressAnalysis: "🧠 Repository Analysis Complete"
+    progressModifying: "✍️ Modifying Files"
+    progressBuilding: "🔨 Building"
+    progressTesting: "🧪 Running Tests"
+    progressRetrying: "♻️ Retrying Build"
+    progressPR: "🚀 Creating Pull Request"
+    progressComplete: "✅ Completed"
+    
+    # Error messages
+    errorInvalidRepo: "❌ Invalid repository. Use /help to see available repositories."
+    errorUnauthorized: "❌ You are not authorized to use this bot."
+    errorInvalidCommand: "❌ Invalid command. Use /help to see available commands."
+    errorMissingInput: "❌ Missing required input. Please provide all required information."
+    errorExecutionFailed: "❌ Execution failed. Check logs for details."
+    
+  # Conversation timeout (in seconds)
+  conversationTimeout: 300
+  
+  # Maximum message length
+  maxMessageLength: 4096
+  
+  # Code block formatting
+  codeBlockMaxLength: 3000

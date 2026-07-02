@@ -1,0 +1,34 @@
+repositories:
+  - name: actioncode
+    fullName: SiddharthMishra28/actioncode
+    defaultBranch: main
+    allowedUsers:
+      - 0  # Replace with actual Telegram user IDs
+    enabledCommands:
+      - fix
+      - add
+      - refactor
+      - review
+      - explain
+      - test
+      - document
+      - cleanup
+      - improve
+      - run
+      - status
+      - logs
+    buildCommand: npm run build
+    testCommand: npm test
+    lintCommand: npm run lint
+    installCommand: npm install
+    environment:
+      NODE_ENV: production
+
+  # Add more repositories as needed
+  # - name: payments-api
+  #   fullName: your-org/payments-api
+  #   defaultBranch: develop
+  #   allowedUsers:
+  #     - 123456789
+  #   buildCommand: ./gradlew build
+  #   testCommand: ./gradlew test

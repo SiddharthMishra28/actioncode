@@ -1,0 +1,74 @@
+notifications:
+  # Telegram notifications
+  telegram:
+    enabled: true
+    
+    # Progress updates
+    progress:
+      enabled: true
+      interval: 30000  # 30 seconds
+      includeBuildOutput: false
+      includeTestResults: true
+    
+    # Completion notifications
+    completion:
+      enabled: true
+      includeBuildLogs: true
+      includeTestResults: true
+      includePRLink: true
+      includeMetrics: true
+    
+    # Failure notifications
+    failure:
+      enabled: true
+      includeErrorDetails: true
+      includeBuildLogs: true
+      includeSuggestions: true
+      retryNotifications: true
+    
+    # Formatting
+    formatting:
+      useMarkdown: true
+      useCodeBlocks: true
+      maxCodeBlockLength: 3000
+      includeTimestamps: true
+  
+  # GitHub notifications
+  github:
+    enabled: true
+    
+    # PR notifications
+    pullRequest:
+      enabled: true
+      assignees: []
+      reviewers: []
+      labels:
+        - "ai-generated"
+        - "automated"
+    
+    # Issue notifications
+    issue:
+      enabled: false
+    
+    # Commit notifications
+    commit:
+      enabled: true
+      includeCoAuthors: true
+  
+  # Email notifications (optional)
+  email:
+    enabled: false
+    recipients: []
+    onCompletion: true
+    onFailure: true
+  
+  # Slack notifications (future)
+  slack:
+    enabled: false
+    webhookUrl: ""
+    channel: ""
+  
+  # Discord notifications (future)
+  discord:
+    enabled: false
+    webhookUrl: ""

@@ -1,0 +1,45 @@
+models:
+  # Free models available through OpenCode
+  free:
+    - name: opencode/free-model
+      description: "OpenCode free model"
+      maxTokens: 4096
+      temperature: 0.7
+      enabled: true
+    
+    - name: opencode/free-model-v2
+      description: "OpenCode free model v2"
+      maxTokens: 8192
+      temperature: 0.7
+      enabled: true
+    
+    # Add more free models as they become available
+    # - name: model-name
+    #   description: "Model description"
+    #   maxTokens: 4096
+    #   temperature: 0.7
+    #   enabled: true
+  
+  # Default model configuration
+  defaults:
+    model: opencode/free-model
+    temperature: 0.7
+    maxTokens: 4096
+    timeout: 300
+  
+  # Model selection rules
+  selection:
+    # Auto-select model based on task complexity
+    autoSelect: true
+    
+    # Task complexity thresholds
+    complexityThresholds:
+      simple: 0.3
+      medium: 0.6
+      complex: 0.8
+    
+    # Model mapping by complexity
+    modelMapping:
+      simple: opencode/free-model
+      medium: opencode/free-model
+      complex: opencode/free-model-v2
