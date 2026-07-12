@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ActionCode - Pipeline Status</title>
+  <link rel="stylesheet" href="css/styles.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🤖</text></svg>">
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div class="logo">
+        <span class="logo-icon">🤖</span>
+        <h1>ActionCode</h1>
+      </div>
+      <p class="tagline">Pipeline Status</p>
+    </header>
+
+    <main>
+      <div class="card" id="status-card">
+        <div class="status-header">
+          <h2>Pipeline Status</h2>
+          <span class="badge" id="status-badge">Loading...</span>
+        </div>
+
+        <div class="request-info" id="request-info">
+          <div class="info-row">
+            <span class="label">Request ID:</span>
+            <span class="value" id="request-id">-</span>
+          </div>
+          <div class="info-row">
+            <span class="label">Repository:</span>
+            <span class="value" id="repository">-</span>
+          </div>
+          <div class="info-row">
+            <span class="label">Branch:</span>
+            <span class="value" id="branch">-</span>
+          </div>
+          <div class="info-row">
+            <span class="label">Created:</span>
+            <span class="value" id="created-at">-</span>
+          </div>
+        </div>
+
+        <div class="progress-steps" id="progress-steps">
+          <div class="step" data-step="pending">
+            <div class="step-icon">⏳</div>
+            <div class="step-label">Pending</div>
+          </div>
+          <div class="step" data-step="validating">
+            <div class="step-icon">🔍</div>
+            <div class="step-label">Validating</div>
+          </div>
+          <div class="step" data-step="dispatched">
+            <div class="step-icon">📤</div>
+            <div class="step-label">Dispatched</div>
+          </div>
+          <div class="step" data-step="running">
+            <div class="step-icon">🏃</div>
+            <div class="step-label">Running</div>
+          </div>
+          <div class="step" data-step="building">
+            <div class="step-icon">🔨</div>
+            <div class="step-label">Building</div>
+          </div>
+          <div class="step" data-step="testing">
+            <div class="step-icon">🧪</div>
+            <div class="step-label">Testing</div>
+          </div>
+          <div class="step" data-step="creating-pr">
+            <div class="step-icon">🚀</div>
+            <div class="step-label">Creating PR</div>
+          </div>
+          <div class="step" data-step="completed">
+            <div class="step-icon">✅</div>
+            <div class="step-label">Completed</div>
+          </div>
+        </div>
+
+        <div class="result-section" id="result-section" style="display: none;">
+          <div class="pr-link" id="pr-link" style="display: none;">
+            <a id="pr-url" href="#" target="_blank" rel="noopener" class="btn-primary">
+              View Pull Request
+            </a>
+          </div>
+
+          <div class="error-message" id="error-message" style="display: none;">
+            <h3>Error</h3>
+            <p id="error-text"></p>
+          </div>
+        </div>
+
+        <div class="rate-limit-section" id="rate-limit-section" style="display: none;">
+          <div class="warning-box">
+            <h3>⚠️ Rate Limit Hit</h3>
+            <p>OpenCode free model rate limit exceeded. Your progress has been saved.</p>
+            <div class="resume-token-container">
+              <label>Resume Token:</label>
+              <div class="token-display">
+                <code id="resume-token-display"></code>
+                <button onclick="copyResumeToken()" class="btn-small">Copy</button>
+              </div>
+              <small>Expires in 12 hours</small>
+            </div>
+            <div class="resume-instructions">
+              <p>To resume via Telegram:</p>
+              <code>/resume YOUR_TOKEN</code>
+              <p>To resume via web UI:</p>
+              <a href="/" class="btn-secondary">Go to Home Page</a>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card logs-card">
+        <div class="logs-header">
+          <h3>Live Logs</h3>
+          <button onclick="clearLogs()" class="btn-small">Clear</button>
+        </div>
+        <pre class="logs-container" id="logs-container">
+          <span class="log-placeholder">Waiting for logs...</span>
+        </pre>
+      </div>
+    </main>
+
+    <footer>
+      <p>
+        <a href="/">← Back to Home</a>
+        |
+        Powered by 
+        <a href="https://github.com/SiddharthMishra28/actioncode" target="_blank" rel="noopener">ActionCode</a>
+      </p>
+    </footer>
+  </div>
+
+  <script src="js/api.js"></script>
+  <script src="js/status.js"></script>
+</body>
+</html>

@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ActionCode - AI Coding Agent</title>
+  <link rel="stylesheet" href="css/styles.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🤖</text></svg>">
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div class="logo">
+        <span class="logo-icon">🤖</span>
+        <h1>ActionCode</h1>
+      </div>
+      <p class="tagline">AI Coding Agent - Powered by OpenCode & GitHub Actions</p>
+    </header>
+
+    <main>
+      <div class="card">
+        <h2>Trigger AI Agent</h2>
+        <form id="trigger-form">
+          <div class="form-group">
+            <label for="github-token">GitHub Personal Access Token</label>
+            <input 
+              type="password" 
+              id="github-token" 
+              name="github-token"
+              required 
+              placeholder="ghp_xxxxxxxxxxxx"
+              autocomplete="off"
+            >
+            <small class="help-text">
+              Needs <code>repo</code> scope. 
+              <a href="https://github.com/settings/tokens" target="_blank" rel="noopener">Generate token</a>
+            </small>
+          </div>
+
+          <div class="form-group">
+            <label for="repo-url">GitHub Repository URL</label>
+            <input 
+              type="url" 
+              id="repo-url" 
+              name="repo-url"
+              required 
+              placeholder="https://github.com/user/repo"
+            >
+            <small class="help-text">Enter the full repository URL</small>
+          </div>
+
+          <div class="form-group">
+            <label for="branch">Branch</label>
+            <input 
+              type="text" 
+              id="branch" 
+              name="branch"
+              value="main"
+              placeholder="main"
+            >
+            <small class="help-text">Target branch for changes</small>
+          </div>
+
+          <div class="form-group">
+            <label for="prompt">Prompt / Instructions</label>
+            <div class="editor-container">
+              <textarea 
+                id="prompt" 
+                name="prompt"
+                rows="10" 
+                required
+                placeholder="Describe what you want to do...&#10;&#10;Examples:&#10;- Fix the bug in the login function&#10;- Add a new API endpoint for user profiles&#10;- Refactor the database connection code&#10;- Add unit tests for the payment module"
+              ></textarea>
+              <div class="editor-preview" id="preview" style="display: none;"></div>
+            </div>
+            <div class="editor-toolbar">
+              <button type="button" class="btn-small" onclick="togglePreview()">Preview</button>
+              <span class="char-count" id="char-count">0 characters</span>
+            </div>
+          </div>
+
+          <div class="form-actions">
+            <button type="submit" id="execute-btn" class="btn-primary">
+              <span class="spinner" id="spinner" style="display: none;"></span>
+              <span id="btn-text">Execute</span>
+            </button>
+          </div>
+        </form>
+      </div>
+
+      <div class="card" id="resume-section" style="display: none;">
+        <h2>Resume Previous Request</h2>
+        <form id="resume-form">
+          <div class="form-group">
+            <label for="resume-token">Resume Token</label>
+            <input 
+              type="text" 
+              id="resume-token" 
+              name="resume-token"
+              required 
+              placeholder="Enter your resume token"
+            >
+            <small class="help-text">
+              Get this from the Telegram bot or previous session
+            </small>
+          </div>
+
+          <div class="form-actions">
+            <button type="submit" class="btn-secondary">
+              Resume
+            </button>
+          </div>
+        </form>
+      </div>
+
+      <div class="card info-card">
+        <h3>How It Works</h3>
+        <ol>
+          <li>Enter your GitHub token and repository</li>
+          <li>Describe what you want to do</li>
+          <li>Click Execute to start the AI agent</li>
+          <li>Watch the progress in real-time</li>
+          <li>Get a Pull Request when complete</li>
+        </ol>
+      </div>
+
+      <div class="card info-card">
+        <h3>Supported Build Systems</h3>
+        <div class="build-systems">
+          <span class="badge">Maven</span>
+          <span class="badge">Gradle</span>
+          <span class="badge">npm</span>
+          <span class="badge">yarn</span>
+          <span class="badge">pnpm</span>
+          <span class="badge">Python</span>
+          <span class="badge">Go</span>
+          <span class="badge">Rust</span>
+          <span class="badge">Docker</span>
+        </div>
+      </div>
+    </main>
+
+    <footer>
+      <p>
+        Powered by 
+        <a href="https://github.com/SiddharthMishra28/actioncode" target="_blank" rel="noopener">ActionCode</a>
+        | 
+        <a href="https://opencode.ai" target="_blank" rel="noopener">OpenCode</a>
+      </p>
+    </footer>
+  </div>
+
+  <script src="js/api.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

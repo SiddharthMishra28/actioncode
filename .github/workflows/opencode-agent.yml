@@ -18,11 +18,11 @@ on:
         type: string
       telegram_chat_id:
         description: 'Telegram chat ID for notifications'
-        required: true
+        required: false
         type: string
       telegram_user:
         description: 'Telegram user who initiated the request'
-        required: true
+        required: false
         type: string
       request_id:
         description: 'Unique request ID'
@@ -52,6 +52,14 @@ on:
           - dry-run
           - analysis-only
         default: 'full'
+      callback_url:
+        description: 'Cloudflare Worker URL for callback'
+        required: false
+        type: string
+      user_github_token:
+        description: 'User GitHub token for their repo'
+        required: false
+        type: string
 
 env:
   TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
@@ -60,6 +68,8 @@ env:
   TARGET_REPO: ${{ inputs.repository }}
   TARGET_BRANCH: ${{ inputs.branch }}
   INSTRUCTION: ${{ inputs.instruction }}
+  CALLBACK_URL: ${{ inputs.callback_url }}
+  USER_GITHUB_TOKEN: ${{ inputs.user_github_token }}
 
 jobs:
   execute:
@@ -70,6 +80,7 @@ jobs:
     steps:
       - name: Send Progress - Accepted
         uses: appleboy/telegram-action@v1.0.0
+        if: inputs.telegram_chat_id != ''
         with:
           token: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           chat_id: ${{ inputs.telegram_chat_id }}
@@ -83,16 +94,28 @@ jobs:
             
             ⏳ Starting execution...
 
+      - name: Determine Git Token
+        id: git-token
+        run: |
+          if [ -n "$USER_GITHUB_TOKEN" ]; then
+            echo "TOKEN=$USER_GITHUB_TOKEN" >> $GITHUB_OUTPUT
+            echo "Using user-provided GitHub token"
+          else
+            echo "TOKEN=${{ secrets.GITHUB_TOKEN }}" >> $GITHUB_OUTPUT
+            echo "Using default GitHub token"
+          fi
+
       - name: Checkout Target Repository
         uses: actions/checkout@v4
         with:
           repository: ${{ inputs.repository }}
           ref: ${{ inputs.branch }}
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ steps.git-token.outputs.TOKEN }}
           fetch-depth: 0
 
       - name: Send Progress - Checkout Complete
         uses: appleboy/telegram-action@v1.0.0
+        if: inputs.telegram_chat_id != ''
         with:
           token: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           chat_id: ${{ inputs.telegram_chat_id }}
@@ -123,6 +146,7 @@ jobs:
 
       - name: Send Progress - Analysis Starting
         uses: appleboy/telegram-action@v1.0.0
+        if: inputs.telegram_chat_id != ''
         with:
           token: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           chat_id: ${{ inputs.telegram_chat_id }}
@@ -172,6 +196,7 @@ jobs:
 
       - name: Send Progress - Analysis Complete
         uses: appleboy/telegram-action@v1.0.0
+        if: inputs.telegram_chat_id != ''
         with:
           token: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           chat_id: ${{ inputs.telegram_chat_id }}
@@ -190,20 +215,51 @@ jobs:
           # Create a temporary file with the instruction
           echo "${{ env.INSTRUCTION }}" > /tmp/instruction.txt
           
-          # Execute OpenCode
-          opencode \
-            --model "${{ env.OPENCODE_MODEL }}" \
-            --instruction "$(cat /tmp/instruction.txt)" \
-            --non-interactive \
-            --auto-approve \
-            --verbose \
-            2>&1 | tee /tmp/opencode-output.txt
+          # Rate limit retry logic
+          MAX_RETRIES=3
+          RETRY_COUNT=0
+          RATE_LIMITED=false
           
-          # Check if OpenCode succeeded
-          if [ $? -eq 0 ]; then
-            echo "SUCCESS=true" >> $GITHUB_OUTPUT
-          else
+          while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+            echo "Attempt $((RETRY_COUNT + 1)) of $MAX_RETRIES..."
+            
+            # Execute OpenCode
+            opencode \
+              --model "${{ env.OPENCODE_MODEL }}" \
+              --instruction "$(cat /tmp/instruction.txt)" \
+              --non-interactive \
+              --auto-approve \
+              --verbose \
+              2>&1 | tee /tmp/opencode-output.txt
+            
+            EXIT_CODE=${PIPESTATUS[0]}
+            
+            # Check for rate limit errors
+            if grep -qi "rate limit\|429\|too many requests" /tmp/opencode-output.txt; then
+              echo "Rate limit detected!"
+              RATE_LIMITED=true
+              echo "RATE_LIMITED=true" >> $GITHUB_OUTPUT
+              break
+            fi
+            
+            # Check for success
+            if [ $EXIT_CODE -eq 0 ]; then
+              echo "SUCCESS=true" >> $GITHUB_OUTPUT
+              break
+            fi
+            
+            # Retry on other errors
+            RETRY_COUNT=$((RETRY_COUNT + 1))
+            if [ $RETRY_COUNT -lt $MAX_RETRIES ]; then
+              echo "Retrying in 30 seconds..."
+              sleep 30
+            fi
+          done
+          
+          # If we exhausted retries without rate limit, mark as failed
+          if [ $RETRY_COUNT -eq $MAX_RETRIES ] && [ "$RATE_LIMITED" != "true" ]; then
             echo "SUCCESS=false" >> $GITHUB_OUTPUT
+            echo "ERROR=Max retries exceeded" >> $GITHUB_OUTPUT
           fi
           
           # Get modified files
@@ -214,7 +270,7 @@ jobs:
 
       - name: Send Progress - Code Modification
         uses: appleboy/telegram-action@v1.0.0
-        if: inputs.execution_mode == 'full'
+        if: inputs.execution_mode == 'full' && steps.opencode.outputs.RATE_LIMITED != 'true'
         with:
           token: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           chat_id: ${{ inputs.telegram_chat_id }}
@@ -242,7 +298,7 @@ jobs:
 
       - name: Send Progress - Build Complete
         uses: appleboy/telegram-action@v1.0.0
-        if: inputs.execution_mode == 'full'
+        if: inputs.execution_mode == 'full' && steps.opencode.outputs.RATE_LIMITED != 'true'
         with:
           token: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           chat_id: ${{ inputs.telegram_chat_id }}
@@ -281,7 +337,7 @@ jobs:
 
       - name: Send Progress - Tests Complete
         uses: appleboy/telegram-action@v1.0.0
-        if: inputs.execution_mode == 'full'
+        if: inputs.execution_mode == 'full' && steps.opencode.outputs.RATE_LIMITED != 'true'
         with:
           token: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           chat_id: ${{ inputs.telegram_chat_id }}
@@ -293,7 +349,7 @@ jobs:
 
       - name: Create Branch and Commit
         id: commit
-        if: inputs.execution_mode == 'full' && steps.build.outputs.BUILD_SUCCESS == 'true'
+        if: inputs.execution_mode == 'full' && steps.build.outputs.BUILD_SUCCESS == 'true' && steps.opencode.outputs.RATE_LIMITED != 'true'
         run: |
           # Configure git
           git config user.name "ActionCode Bot"
@@ -325,7 +381,7 @@ jobs:
 
       - name: Create Pull Request
         id: pr
-        if: inputs.execution_mode == 'full' && steps.commit.outputs.COMMIT_SHA != ''
+        if: inputs.execution_mode == 'full' && steps.commit.outputs.COMMIT_SHA != '' && steps.opencode.outputs.RATE_LIMITED != 'true'
         uses: actions/github-script@v7
         with:
           script: |
@@ -390,7 +446,7 @@ jobs:
 
       - name: Send Progress - PR Created
         uses: appleboy/telegram-action@v1.0.0
-        if: inputs.execution_mode == 'full' && steps.pr.outputs.PR_URL
+        if: inputs.execution_mode == 'full' && steps.pr.outputs.PR_URL && steps.opencode.outputs.RATE_LIMITED != 'true'
         with:
           token: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           chat_id: ${{ inputs.telegram_chat_id }}
@@ -402,7 +458,7 @@ jobs:
 
       - name: Send Completion Message
         uses: appleboy/telegram-action@v1.0.0
-        if: always()
+        if: always() && inputs.telegram_chat_id != '' && steps.opencode.outputs.RATE_LIMITED != 'true'
         with:
           token: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           chat_id: ${{ inputs.telegram_chat_id }}
@@ -418,6 +474,61 @@ jobs:
             ${{ steps.pr.outputs.PR_URL && format('PR: [View Pull Request]({0})', steps.pr.outputs.PR_URL) || '' }}
             
             Workflow: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+      - name: Callback to Worker - Rate Limited
+        if: always() && steps.opencode.outputs.RATE_LIMITED == 'true' && env.CALLBACK_URL != ''
+        run: |
+          # Generate resume token
+          RESUME_TOKEN=$(uuidgen)
+          
+          # Get modified files
+          MODIFIED_FILES=$(git diff --name-only 2>/dev/null || echo "")
+          
+          # Send rate limit callback
+          curl -X POST "${{ env.CALLBACK_URL }}/webhook/github" \
+            -H "Content-Type: application/json" \
+            -H "X-Webhook-Secret: ${{ secrets.WEBHOOK_SECRET }}" \
+            -d '{
+              "request_id": "${{ env.REQUEST_ID }}",
+              "status": "rate-limited",
+              "resume_token": "'"$RESUME_TOKEN"'",
+              "modified_files": "'"$(echo $MODIFIED_FILES | tr '\n' ',')"'",
+              "commit_sha": "'"$(git rev-parse HEAD 2>/dev/null || echo '')"'",
+              "branch": "'"$(git branch --show-current 2>/dev/null || echo '')"'"
+            }'
+          
+          echo "RESUME_TOKEN=$RESUME_TOKEN" >> $GITHUB_OUTPUT
+
+      - name: Callback to Worker - Completed
+        if: always() && steps.commit.outputs.COMMIT_SHA != '' && steps.opencode.outputs.RATE_LIMITED != 'true' && env.CALLBACK_URL != ''
+        run: |
+          curl -X POST "${{ env.CALLBACK_URL }}/webhook/github" \
+            -H "Content-Type: application/json" \
+            -H "X-Webhook-Secret: ${{ secrets.WEBHOOK_SECRET }}" \
+            -d '{
+              "request_id": "${{ env.REQUEST_ID }}",
+              "status": "completed",
+              "pr_url": "${{ steps.pr.outputs.PR_URL || '' }}",
+              "build_success": "${{ steps.build.outputs.BUILD_SUCCESS }}",
+              "test_success": "${{ steps.test.outputs.TEST_SUCCESS }}",
+              "modified_files": "'"$(echo $MODIFIED_FILES | tr '\n' ',')"'",
+              "commit_sha": "${{ steps.commit.outputs.COMMIT_SHA }}",
+              "branch": "${{ steps.commit.outputs.BRANCH_NAME }}"
+            }'
+
+      - name: Callback to Worker - Failed
+        if: always() && steps.commit.outputs.COMMIT_SHA == '' && steps.opencode.outputs.RATE_LIMITED != 'true' && env.CALLBACK_URL != ''
+        run: |
+          curl -X POST "${{ env.CALLBACK_URL }}/webhook/github" \
+            -H "Content-Type: application/json" \
+            -H "X-Webhook-Secret: ${{ secrets.WEBHOOK_SECRET }}" \
+            -d '{
+              "request_id": "${{ env.REQUEST_ID }}",
+              "status": "failed",
+              "error_message": "${{ steps.opencode.outputs.ERROR || 'Workflow failed' }}",
+              "build_success": "${{ steps.build.outputs.BUILD_SUCCESS }}",
+              "test_success": "${{ steps.test.outputs.TEST_SUCCESS }}"
+            }'
 
       - name: Upload Logs
         uses: actions/upload-artifact@v4
