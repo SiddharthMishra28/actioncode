@@ -10,7 +10,7 @@ import { triggerWorkflow, validateGithubToken, validateRepositoryAccess } from '
 
 // Session storage for conversation state
 const sessions = new Map<string, {
-  step: 'command' | 'repo' | 'branch' | 'instruction' | 'confirm';
+  step: 'repo' | 'repo_name' | 'branch' | 'instruction' | 'confirm';
   command?: string;
   repo?: string;
   branch?: string;
@@ -96,11 +96,11 @@ async function handleCommand(
 // Send help message
 async function sendHelp(env: Env, chatId: string): Promise<Response> {
   const helpMessage = [
-    '🤖 *ActionCode Bot*',
+    '<b>ActionCode Bot</b>',
     '',
     'I help you modify code using AI.',
     '',
-    '*Commands:*',
+    '<b>Commands:</b>',
     '/fix - Fix bugs or issues',
     '/add - Add new features',
     '/refactor - Refactor code',
@@ -112,12 +112,12 @@ async function sendHelp(env: Env, chatId: string): Promise<Response> {
     '/improve - Improve code quality',
     '/run - Run custom instructions',
     '',
-    '*Other Commands:*',
-    '/status <request_id> - Check request status',
-    '/resume <token> - Resume a rate-limited request',
+    '<b>Other Commands:</b>',
+    '/status &lt;request_id&gt; - Check request status',
+    '/resume &lt;token&gt; - Resume a rate-limited request',
     '/help - Show this help message',
     '',
-    '*How to use:*',
+    '<b>How to use:</b>',
     '1. Send a command (e.g., /fix)',
     '2. Enter your GitHub token',
     '3. Enter repository (owner/repo)',
@@ -125,10 +125,10 @@ async function sendHelp(env: Env, chatId: string): Promise<Response> {
     '5. Describe what you want to do',
     '6. Confirm to start',
     '',
-    '*Web UI:* Visit ezcode.github.io',
+    '<b>Web UI:</b> Visit ezcode.github.io',
   ].join('\n');
   
-  await sendTelegramMessage(env, chatId, helpMessage, { parse_mode: 'Markdown' });
+  await sendTelegramMessage(env, chatId, helpMessage, { parse_mode: 'HTML' });
   return new Response('OK');
 }
 
@@ -210,17 +210,17 @@ async function handleConversation(
       session.step = 'confirm';
       
       const confirmMessage = [
-        '*Confirm Request:*',
+        '<b>Confirm Request:</b>',
         '',
         `Command: ${session.command}`,
-        `Repository: \`${session.repo}\``,
-        `Branch: \`${session.branch}\``,
+        `Repository: <code>${session.repo}</code>`,
+        `Branch: <code>${session.branch}</code>`,
         `Instruction: ${session.instruction}`,
         '',
         'Reply "yes" to start or "no" to cancel.',
       ].join('\n');
       
-      await sendTelegramMessage(env, chatId, confirmMessage, { parse_mode: 'Markdown' });
+      await sendTelegramMessage(env, chatId, confirmMessage, { parse_mode: 'HTML' });
       return new Response('OK');
     
     case 'confirm':
@@ -324,18 +324,18 @@ async function handleStatus(
   }
   
   const statusMessage = [
-    '*Request Status*',
+    '<b>Request Status</b>',
     '',
-    `ID: \`${request.id}\``,
+    `ID: <code>${request.id}</code>`,
     `Status: ${request.status}`,
-    `Repository: \`${request.repository}\``,
-    `Branch: \`${request.branch}\``,
+    `Repository: <code>${request.repository}</code>`,
+    `Branch: <code>${request.branch}</code>`,
     `Created: ${request.createdAt}`,
-    request.prUrl ? `PR: [View Pull Request](${request.prUrl})` : '',
+    request.prUrl ? `PR: <a href="${request.prUrl}">View Pull Request</a>` : '',
     request.errorMessage ? `Error: ${request.errorMessage}` : '',
   ].filter(Boolean).join('\n');
   
-  await sendTelegramMessage(env, chatId, statusMessage, { parse_mode: 'Markdown' });
+  await sendTelegramMessage(env, chatId, statusMessage, { parse_mode: 'HTML' });
   return new Response('OK');
 }
 

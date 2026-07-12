@@ -15,7 +15,7 @@ export async function sendTelegramMessage(
   const body: Record<string, unknown> = {
     chat_id: chatId,
     text,
-    parse_mode: options.parse_mode || 'Markdown',
+    parse_mode: options.parse_mode || 'HTML',
   };
   
   if (options.reply_to_message_id) {
@@ -81,17 +81,17 @@ export async function sendCompletionMessage(
   }
 ): Promise<void> {
   const message = [
-    '✅ *Request Complete*',
+    '<b>Request Complete</b>',
     '',
-    `Repository: \`${result.repository}\``,
-    `Branch: \`${result.branch}\``,
-    result.commitSha ? `Commit: \`${result.commitSha}\`` : '',
+    `Repository: <code>${result.repository}</code>`,
+    `Branch: <code>${result.branch}</code>`,
+    result.commitSha ? `Commit: <code>${result.commitSha}</code>` : '',
     `Files Modified: ${result.filesChanged || 0}`,
-    result.prUrl ? `PR: [View Pull Request](${result.prUrl})` : '',
+    result.prUrl ? `PR: <a href="${result.prUrl}">View Pull Request</a>` : '',
     `Execution Time: ${result.duration}`,
   ].filter(Boolean).join('\n');
   
-  await sendTelegramMessage(env, chatId, message, { parse_mode: 'Markdown' });
+  await sendTelegramMessage(env, chatId, message, { parse_mode: 'HTML' });
 }
 
 // Send a failure message
@@ -105,17 +105,17 @@ export async function sendFailureMessage(
   }
 ): Promise<void> {
   const message = [
-    '❌ *Request Failed*',
+    '<b>Request Failed</b>',
     '',
     `Reason: ${error.reason}`,
     '',
     error.modifiedFiles && error.modifiedFiles.length > 0 
-      ? `Modified Files:\n${error.modifiedFiles.map(f => `- \`${f}\``).join('\n')}` 
+      ? `Modified Files:\n${error.modifiedFiles.map(f => `- <code>${f}</code>`).join('\n')}` 
       : '',
-    error.workflowUrl ? `\nWorkflow: [View Logs](${error.workflowUrl})` : '',
+    error.workflowUrl ? `\nWorkflow: <a href="${error.workflowUrl}">View Logs</a>` : '',
   ].filter(Boolean).join('\n');
   
-  await sendTelegramMessage(env, chatId, message, { parse_mode: 'Markdown' });
+  await sendTelegramMessage(env, chatId, message, { parse_mode: 'HTML' });
 }
 
 // Send a rate limit message with resume token
@@ -125,13 +125,13 @@ export async function sendRateLimitMessage(
   resumeToken: string
 ): Promise<void> {
   const message = [
-    '⚠️ *Rate Limit Hit*',
+    '<b>Rate Limit Hit</b>',
     '',
     'OpenCode free model rate limit exceeded.',
     'Your progress has been saved.',
     '',
-    `*Resume Token:* \`${resumeToken}\``,
-    '*Expires:* 12 hours',
+    `<b>Resume Token:</b> <code>${resumeToken}</code>`,
+    '<b>Expires:</b> 12 hours',
     '',
     'To resume via Telegram:',
     `/resume ${resumeToken}`,
@@ -140,7 +140,7 @@ export async function sendRateLimitMessage(
     'Visit ezcode.github.io and use this token',
   ].filter(Boolean).join('\n');
   
-  await sendTelegramMessage(env, chatId, message, { parse_mode: 'Markdown' });
+  await sendTelegramMessage(env, chatId, message, { parse_mode: 'HTML' });
 }
 
 // Set webhook for Telegram
