@@ -139,16 +139,22 @@
                       <option value="permissive">Safety: Permissive</option>
                     </select>
                   </div>
-                  <textarea id="prompt" class="md-editor-write" rows="6" required placeholder="Describe what you want the AI agent to build, fix, or modify...
+                  <textarea id="prompt" class="md-editor-write" rows="16" required placeholder="Describe what you want the AI agent to build, fix, or modify...
 
-You can use **markdown** formatting:
-- **Bold** text for emphasis
-- `code` for inline code
-- ```code blocks``` for multi-line code
-- > Quotes for requirements
-- - Lists for multiple items"></textarea>
+Examples:
+  Create a REST API with Express.js including:
+  - User authentication with JWT
+  - CRUD operations for products
+  - Input validation and error handling
+  - Unit tests with Jest
+  - README with setup instructions
+
+  Fix the memory leak in the WebSocket connection handler
+  Add a dark mode toggle to the React dashboard
+  Refactor the database layer to use connection pooling"></textarea>
                   <div class="md-editor-preview" id="md-preview"></div>
                   <span class="md-editor-charcount" id="char-count">0 chars</span>
+                  <span class="md-editor-hint"><kbd>Ctrl</kbd>+<kbd>Enter</kbd> to execute</span>
                 </div>
               </div>
             </div>
