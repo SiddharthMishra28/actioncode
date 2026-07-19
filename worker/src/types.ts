@@ -35,12 +35,15 @@ export interface RequestData {
   repository: string;
   branch: string;
   instruction: string;
+  channel: 'telegram' | 'web';
   userTelegramId: number;
   userTelegramChatId: string;
   workflowRunId?: number;
   prUrl?: string;
   commitSha?: string;
   modifiedFiles?: string[];
+  buildSuccess?: boolean;
+  testSuccess?: boolean;
   createdAt: string;
   updatedAt: string;
   completedAt?: string;

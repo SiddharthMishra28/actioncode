@@ -78,6 +78,14 @@ jobs:
     timeout-minutes: 30
     
     steps:
+      - name: Callback - Running
+        if: env.CALLBACK_URL != ''
+        run: |
+          curl -s -X POST "${CALLBACK_URL}/webhook/github" \
+            -H "Content-Type: application/json" \
+            -H "X-Webhook-Secret: ${{ secrets.WEBHOOK_SECRET }}" \
+            -d "{\"request_id\":\"${REQUEST_ID}\",\"status\":\"running\"}" || true
+
       - name: Send Progress - Accepted
         uses: appleboy/telegram-action@v1.0.0
         if: inputs.telegram_chat_id != ''
@@ -144,20 +152,11 @@ jobs:
           }
           EOF
 
-      - name: Send Progress - Analysis Starting
-        uses: appleboy/telegram-action@v1.0.0
-        if: inputs.telegram_chat_id != ''
-        with:
-          token: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          chat_id: ${{ inputs.telegram_chat_id }}
-          message: "🧠 Repository Analysis Starting..."
-
       - name: Analyze Repository
         id: analyze
         run: |
           echo "Analyzing repository structure..."
           
-          # Detect build system
           if [ -f "pom.xml" ]; then
             echo "BUILD_SYSTEM=maven" >> $GITHUB_OUTPUT
             echo "BUILD_CMD=mvn clean package -DskipTests" >> $GITHUB_OUTPUT
@@ -188,34 +187,19 @@ jobs:
             echo "TEST_CMD=" >> $GITHUB_OUTPUT
           fi
           
-          # Get file statistics
           TOTAL_FILES=$(find . -type f -not -path '*/node_modules/*' -not -path '*/.git/*' | wc -l)
           echo "TOTAL_FILES=$TOTAL_FILES" >> $GITHUB_OUTPUT
           
           echo "Repository analysis complete"
 
-      - name: Send Progress - Analysis Complete
-        uses: appleboy/telegram-action@v1.0.0
-        if: inputs.telegram_chat_id != ''
-        with:
-          token: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          chat_id: ${{ inputs.telegram_chat_id }}
-          message: |
-            🧠 *Repository Analysis Complete*
-            
-            Build System: ${{ steps.analyze.outputs.BUILD_SYSTEM }}
-            Total Files: ${{ steps.analyze.outputs.TOTAL_FILES }}
-
       - name: Execute OpenCode
         id: opencode
         if: inputs.execution_mode == 'full'
         run: |
-          echo "Executing OpenCode with instruction: ${{ env.INSTRUCTION }}"
+          echo "Executing OpenCode with instruction: $INSTRUCTION"
           
-          # Create a temporary file with the instruction
-          echo "${{ env.INSTRUCTION }}" > /tmp/instruction.txt
+          echo "$INSTRUCTION" > /tmp/instruction.txt
           
-          # Rate limit retry logic
           MAX_RETRIES=3
           RETRY_COUNT=0
           RATE_LIMITED=false
@@ -223,9 +207,8 @@ jobs:
           while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
             echo "Attempt $((RETRY_COUNT + 1)) of $MAX_RETRIES..."
             
-            # Execute OpenCode
             opencode \
-              --model "${{ env.OPENCODE_MODEL }}" \
+              --model "$OPENCODE_MODEL" \
               --instruction "$(cat /tmp/instruction.txt)" \
               --non-interactive \
               --auto-approve \
@@ -234,7 +217,6 @@ jobs:
             
             EXIT_CODE=${PIPESTATUS[0]}
             
-            # Check for rate limit errors
             if grep -qi "rate limit\|429\|too many requests" /tmp/opencode-output.txt; then
               echo "Rate limit detected!"
               RATE_LIMITED=true
@@ -242,13 +224,11 @@ jobs:
               break
             fi
             
-            # Check for success
             if [ $EXIT_CODE -eq 0 ]; then
               echo "SUCCESS=true" >> $GITHUB_OUTPUT
               break
             fi
             
-            # Retry on other errors
             RETRY_COUNT=$((RETRY_COUNT + 1))
             if [ $RETRY_COUNT -lt $MAX_RETRIES ]; then
               echo "Retrying in 30 seconds..."
@@ -256,25 +236,23 @@ jobs:
             fi
           done
           
-          # If we exhausted retries without rate limit, mark as failed
           if [ $RETRY_COUNT -eq $MAX_RETRIES ] && [ "$RATE_LIMITED" != "true" ]; then
             echo "SUCCESS=false" >> $GITHUB_OUTPUT
             echo "ERROR=Max retries exceeded" >> $GITHUB_OUTPUT
           fi
           
-          # Get modified files
           MODIFIED_FILES=$(git diff --name-only 2>/dev/null || echo "")
           echo "MODIFIED_FILES<<EOF" >> $GITHUB_OUTPUT
           echo "$MODIFIED_FILES" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
 
-      - name: Send Progress - Code Modification
-        uses: appleboy/telegram-action@v1.0.0
-        if: inputs.execution_mode == 'full' && steps.opencode.outputs.RATE_LIMITED != 'true'
-        with:
-          token: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          chat_id: ${{ inputs.telegram_chat_id }}
-          message: "✍️ Code Modification Complete"
+      - name: Callback - Code Modified
+        if: always() && steps.opencode.outputs.RATE_LIMITED != 'true' && env.CALLBACK_URL != ''
+        run: |
+          curl -s -X POST "${CALLBACK_URL}/webhook/github" \
+            -H "Content-Type: application/json" \
+            -H "X-Webhook-Secret: ${{ secrets.WEBHOOK_SECRET }}" \
+            -d "{\"request_id\":\"${REQUEST_ID}\",\"status\":\"building\"}" || true
 
       - name: Build Project
         id: build
@@ -296,16 +274,13 @@ jobs:
             echo "BUILD_SUCCESS=true" >> $GITHUB_OUTPUT
           fi
 
-      - name: Send Progress - Build Complete
-        uses: appleboy/telegram-action@v1.0.0
-        if: inputs.execution_mode == 'full' && steps.opencode.outputs.RATE_LIMITED != 'true'
-        with:
-          token: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          chat_id: ${{ inputs.telegram_chat_id }}
-          message: |
-            🔨 *Build Complete*
-            
-            Status: ${{ steps.build.outputs.BUILD_SUCCESS == 'true' && '✅ Passed' || '❌ Failed' }}
+      - name: Callback - Build Complete
+        if: always() && steps.opencode.outputs.RATE_LIMITED != 'true' && env.CALLBACK_URL != ''
+        run: |
+          curl -s -X POST "${CALLBACK_URL}/webhook/github" \
+            -H "Content-Type: application/json" \
+            -H "X-Webhook-Secret: ${{ secrets.WEBHOOK_SECRET }}" \
+            -d "{\"request_id\":\"${REQUEST_ID}\",\"status\":\"testing\"}" || true
 
       - name: Run Tests
         id: test
@@ -323,7 +298,6 @@ jobs:
               echo "TEST_SUCCESS=false" >> $GITHUB_OUTPUT
             fi
             
-            # Extract test results (simplified)
             PASSED=$(grep -oP '\d+ passed' /tmp/test-output.txt | grep -oP '\d+' || echo "0")
             FAILED=$(grep -oP '\d+ failed' /tmp/test-output.txt | grep -oP '\d+' || echo "0")
             echo "PASSED=$PASSED" >> $GITHUB_OUTPUT
@@ -335,49 +309,38 @@ jobs:
             echo "FAILED=0" >> $GITHUB_OUTPUT
           fi
 
-      - name: Send Progress - Tests Complete
-        uses: appleboy/telegram-action@v1.0.0
-        if: inputs.execution_mode == 'full' && steps.opencode.outputs.RATE_LIMITED != 'true'
-        with:
-          token: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          chat_id: ${{ inputs.telegram_chat_id }}
-          message: |
-            🧪 *Tests Complete*
-            
-            Passed: ${{ steps.test.outputs.PASSED || '0' }}
-            Failed: ${{ steps.test.outputs.FAILED || '0' }}
-
       - name: Create Branch and Commit
         id: commit
         if: inputs.execution_mode == 'full' && steps.build.outputs.BUILD_SUCCESS == 'true' && steps.opencode.outputs.RATE_LIMITED != 'true'
         run: |
-          # Configure git
           git config user.name "ActionCode Bot"
           git config user.email "actioncode@bot.github.com"
           
-          # Create a new branch
-          BRANCH_NAME="ai/${{ env.REQUEST_ID }}"
+          BRANCH_NAME="ai/${REQUEST_ID}"
           git checkout -b "$BRANCH_NAME"
           
-          # Stage changes
           git add -A
           
-          # Check if there are changes to commit
           if git diff --cached --quiet; then
             echo "No changes to commit"
             echo "COMMIT_SHA=" >> $GITHUB_OUTPUT
             echo "BRANCH_NAME=" >> $GITHUB_OUTPUT
           else
-            # Commit changes
-            git commit -m "AI: ${{ env.INSTRUCTION }}" -m "Generated by ActionCode Bot" -m "Request ID: ${{ env.REQUEST_ID }}"
-            
-            # Push to remote
+            git commit -m "AI: ${INSTRUCTION}" -m "Generated by ActionCode Bot" -m "Request ID: ${REQUEST_ID}"
             git push origin "$BRANCH_NAME"
             
             COMMIT_SHA=$(git rev-parse HEAD)
             echo "COMMIT_SHA=$COMMIT_SHA" >> $GITHUB_OUTPUT
             echo "BRANCH_NAME=$BRANCH_NAME" >> $GITHUB_OUTPUT
           fi
+
+      - name: Callback - Creating PR
+        if: always() && steps.commit.outputs.COMMIT_SHA != '' && steps.opencode.outputs.RATE_LIMITED != 'true' && env.CALLBACK_URL != ''
+        run: |
+          curl -s -X POST "${CALLBACK_URL}/webhook/github" \
+            -H "Content-Type: application/json" \
+            -H "X-Webhook-Secret: ${{ secrets.WEBHOOK_SECRET }}" \
+            -d "{\"request_id\":\"${REQUEST_ID}\",\"status\":\"creating-pr\"}" || true
 
       - name: Create Pull Request
         id: pr
@@ -433,7 +396,6 @@ jobs:
               base: '${{ inputs.branch }}',
             });
             
-            // Add labels
             await github.rest.issues.addLabels({
               owner: context.repo.owner,
               repo: context.repo.repo,
@@ -475,60 +437,58 @@ jobs:
             
             Workflow: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
 
-      - name: Callback to Worker - Rate Limited
-        if: always() && steps.opencode.outputs.RATE_LIMITED == 'true' && env.CALLBACK_URL != ''
-        run: |
-          # Generate resume token
-          RESUME_TOKEN=$(uuidgen)
-          
-          # Get modified files
-          MODIFIED_FILES=$(git diff --name-only 2>/dev/null || echo "")
-          
-          # Send rate limit callback
-          curl -X POST "${{ env.CALLBACK_URL }}/webhook/github" \
-            -H "Content-Type: application/json" \
-            -H "X-Webhook-Secret: ${{ secrets.WEBHOOK_SECRET }}" \
-            -d '{
-              "request_id": "${{ env.REQUEST_ID }}",
-              "status": "rate-limited",
-              "resume_token": "'"$RESUME_TOKEN"'",
-              "modified_files": "'"$(echo $MODIFIED_FILES | tr '\n' ',')"'",
-              "commit_sha": "'"$(git rev-parse HEAD 2>/dev/null || echo '')"'",
-              "branch": "'"$(git branch --show-current 2>/dev/null || echo '')"'"
-            }'
-          
-          echo "RESUME_TOKEN=$RESUME_TOKEN" >> $GITHUB_OUTPUT
-
-      - name: Callback to Worker - Completed
+      - name: Callback - Completed
         if: always() && steps.commit.outputs.COMMIT_SHA != '' && steps.opencode.outputs.RATE_LIMITED != 'true' && env.CALLBACK_URL != ''
+        env:
+          MODIFIED_FILES: ${{ steps.opencode.outputs.MODIFIED_FILES }}
         run: |
-          curl -X POST "${{ env.CALLBACK_URL }}/webhook/github" \
+          MODIFIED_JSON=$(echo "$MODIFIED_FILES" | tr '\n' ',' | sed 's/"/\\"/g')
+          curl -s -X POST "${CALLBACK_URL}/webhook/github" \
             -H "Content-Type: application/json" \
             -H "X-Webhook-Secret: ${{ secrets.WEBHOOK_SECRET }}" \
-            -d '{
-              "request_id": "${{ env.REQUEST_ID }}",
-              "status": "completed",
-              "pr_url": "${{ steps.pr.outputs.PR_URL || '' }}",
-              "build_success": "${{ steps.build.outputs.BUILD_SUCCESS }}",
-              "test_success": "${{ steps.test.outputs.TEST_SUCCESS }}",
-              "modified_files": "'"$(echo $MODIFIED_FILES | tr '\n' ',')"'",
-              "commit_sha": "${{ steps.commit.outputs.COMMIT_SHA }}",
-              "branch": "${{ steps.commit.outputs.BRANCH_NAME }}"
-            }'
+            -d "{
+              \"request_id\": \"${REQUEST_ID}\",
+              \"status\": \"completed\",
+              \"pr_url\": \"${{ steps.pr.outputs.PR_URL || '' }}\",
+              \"build_success\": \"${{ steps.build.outputs.BUILD_SUCCESS }}\",
+              \"test_success\": \"${{ steps.test.outputs.TEST_SUCCESS }}\",
+              \"modified_files\": \"${MODIFIED_JSON}\",
+              \"commit_sha\": \"${{ steps.commit.outputs.COMMIT_SHA }}\",
+              \"branch\": \"${{ steps.commit.outputs.BRANCH_NAME }}\"
+            }" || true
 
-      - name: Callback to Worker - Failed
+      - name: Callback - Failed
         if: always() && steps.commit.outputs.COMMIT_SHA == '' && steps.opencode.outputs.RATE_LIMITED != 'true' && env.CALLBACK_URL != ''
         run: |
-          curl -X POST "${{ env.CALLBACK_URL }}/webhook/github" \
+          curl -s -X POST "${CALLBACK_URL}/webhook/github" \
             -H "Content-Type: application/json" \
             -H "X-Webhook-Secret: ${{ secrets.WEBHOOK_SECRET }}" \
-            -d '{
-              "request_id": "${{ env.REQUEST_ID }}",
-              "status": "failed",
-              "error_message": "${{ steps.opencode.outputs.ERROR || 'Workflow failed' }}",
-              "build_success": "${{ steps.build.outputs.BUILD_SUCCESS }}",
-              "test_success": "${{ steps.test.outputs.TEST_SUCCESS }}"
-            }'
+            -d "{
+              \"request_id\": \"${REQUEST_ID}\",
+              \"status\": \"failed\",
+              \"error_message\": \"${{ steps.opencode.outputs.ERROR || 'Workflow failed' }}\",
+              \"build_success\": \"${{ steps.build.outputs.BUILD_SUCCESS }}\",
+              \"test_success\": \"${{ steps.test.outputs.TEST_SUCCESS }}\"
+            }" || true
+
+      - name: Callback - Rate Limited
+        if: always() && steps.opencode.outputs.RATE_LIMITED == 'true' && env.CALLBACK_URL != ''
+        env:
+          MODIFIED_FILES: ${{ steps.opencode.outputs.MODIFIED_FILES }}
+        run: |
+          RESUME_TOKEN=$(cat /proc/sys/kernel/random/uuid 2>/dev/null || uuidgen 2>/dev/null || echo "resume-$(date +%s)")
+          MODIFIED_JSON=$(echo "$MODIFIED_FILES" | tr '\n' ',' | sed 's/"/\\"/g')
+          curl -s -X POST "${CALLBACK_URL}/webhook/github" \
+            -H "Content-Type: application/json" \
+            -H "X-Webhook-Secret: ${{ secrets.WEBHOOK_SECRET }}" \
+            -d "{
+              \"request_id\": \"${REQUEST_ID}\",
+              \"status\": \"rate-limited\",
+              \"resume_token\": \"${RESUME_TOKEN}\",
+              \"modified_files\": \"${MODIFIED_JSON}\",
+              \"commit_sha\": \"$(git rev-parse HEAD 2>/dev/null || echo '')\",
+              \"branch\": \"$(git branch --show-current 2>/dev/null || echo '')\"
+            }" || true
 
       - name: Upload Logs
         uses: actions/upload-artifact@v4

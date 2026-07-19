@@ -7,120 +7,109 @@ import {
   sendRateLimitMessage 
 } from '../services/telegram-api';
 import { generateResumeToken } from '../utils/crypto';
-import { verifyGitHubSignature } from '../utils/crypto';
 
 // Handle GitHub Actions callback
 export async function handleGitHubCallback(
   request: Request,
   env: Env
 ): Promise<Response> {
-  // Verify webhook signature
-  const signature = request.headers.get('X-Hub-Signature-256');
   const body = await request.text();
-  
+
+  // Verify webhook secret — workflow sends X-Webhook-Secret header
   if (env.WEBHOOK_SECRET) {
-    const isValid = await verifyGitHubSignature(body, signature, env.WEBHOOK_SECRET);
-    if (!isValid) {
-      return new Response('Unauthorized', { status: 401 });
+    const secret = request.headers.get('x-webhook-secret');
+    if (secret !== env.WEBHOOK_SECRET) {
+      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+        status: 401,
+        headers: { 'Content-Type': 'application/json' },
+      });
     }
   }
-  
+
   // Parse payload
   let payload: GitHubCallbackPayload;
   try {
     payload = JSON.parse(body);
-  } catch (error) {
-    return new Response('Invalid JSON', { status: 400 });
+  } catch {
+    return new Response(JSON.stringify({ error: 'Invalid JSON' }), {
+      status: 400,
+      headers: { 'Content-Type': 'application/json' },
+    });
   }
   
   const { request_id, status, pr_url, build_success, test_success, 
           modified_files, commit_sha, branch, error_message } = payload;
   
   if (!request_id || !status) {
-    return new Response('Missing required fields', { status: 400 });
+    return new Response(JSON.stringify({ error: 'Missing required fields' }), {
+      status: 400,
+      headers: { 'Content-Type': 'application/json' },
+    });
   }
   
   // Get the request from KV
   const requestData = await getRequest(env, request_id);
   
   if (!requestData) {
-    console.error(`Request not found: ${request_id}`);
-    return new Response('Request not found', { status: 404 });
+    return new Response(JSON.stringify({ error: 'Request not found' }), {
+      status: 404,
+      headers: { 'Content-Type': 'application/json' },
+    });
   }
   
   // Update request based on status
-  const updates: any = {
+  const updates: Record<string, unknown> = {
     status,
   };
   
-  if (pr_url) {
-    updates.prUrl = pr_url;
-  }
+  if (pr_url) updates.prUrl = pr_url;
+  if (commit_sha) updates.commitSha = commit_sha;
+  if (modified_files) updates.modifiedFiles = modified_files.split(',').filter(f => f.trim());
+  if (error_message) updates.errorMessage = error_message;
+  if (branch) updates.branch = branch;
+  if (build_success !== undefined) updates.buildSuccess = build_success === 'true';
+  if (test_success !== undefined) updates.testSuccess = test_success === 'true';
+
+  // Handle different statuses — send Telegram notifications where applicable
+  const chatId = requestData.userTelegramChatId;
   
-  if (commit_sha) {
-    updates.commitSha = commit_sha;
-  }
-  
-  if (modified_files) {
-    updates.modifiedFiles = modified_files.split(',').filter(f => f.trim());
-  }
-  
-  if (error_message) {
-    updates.errorMessage = error_message;
-  }
-  
-  if (branch) {
-    // Update branch if it changed
-  }
-  
-  // Handle different statuses
   switch (status) {
     case 'running':
     case 'building':
     case 'testing':
     case 'retrying':
     case 'creating-pr':
-      await sendProgressUpdate(
-        env,
-        requestData.userTelegramChatId,
-        status,
-        `Request ID: ${request_id}`
-      );
+      if (chatId) {
+        await sendProgressUpdate(env, chatId, status, `Request ID: ${request_id}`);
+      }
       break;
     
     case 'completed':
       updates.completedAt = new Date().toISOString();
-      await sendCompletionMessage(
-        env,
-        requestData.userTelegramChatId,
-        {
+      if (chatId) {
+        await sendCompletionMessage(env, chatId, {
           repository: requestData.repository,
           branch: requestData.branch,
           prUrl: pr_url,
           commitSha: commit_sha,
           filesChanged: modified_files ? modified_files.split(',').length : 0,
           duration: calculateDuration(requestData.createdAt),
-        }
-      );
+        });
+      }
       break;
     
     case 'failed':
       updates.completedAt = new Date().toISOString();
-      await sendFailureMessage(
-        env,
-        requestData.userTelegramChatId,
-        {
+      if (chatId) {
+        await sendFailureMessage(env, chatId, {
           reason: error_message || 'Workflow failed',
           modifiedFiles: modified_files ? modified_files.split(',') : [],
-        }
-      );
+        });
+      }
       break;
     
-    case 'rate-limited':
-      // Generate resume token
+    case 'rate-limited': {
       const resumeToken = generateResumeToken();
-      
-      // Save resume data to KV
       const resumeData = {
         token: resumeToken,
         requestId: request_id,
@@ -132,43 +121,51 @@ export async function handleGitHubCallback(
         remainingInstruction: 'Continue from where we left off. Complete remaining steps.',
         repository: requestData.repository,
         createdAt: new Date().toISOString(),
-        expiresAt: new Date(Date.now() + 12 * 60 * 60 * 1000).toISOString(), // 12 hours
+        expiresAt: new Date(Date.now() + 12 * 60 * 60 * 1000).toISOString(),
       };
       
       await env.ACTIONCODE_KV.put(
         `resume:${resumeToken}`,
         JSON.stringify(resumeData),
-        { expirationTtl: 12 * 60 * 60 } // 12 hours
+        { expirationTtl: 12 * 60 * 60 }
       );
       
       updates.resumeToken = resumeToken;
       updates.completedAt = new Date().toISOString();
       
-      await sendRateLimitMessage(
-        env,
-        requestData.userTelegramChatId,
-        resumeToken
-      );
+      if (chatId) {
+        await sendRateLimitMessage(env, chatId, resumeToken);
+      }
       break;
+    }
     
     default:
-      // For other statuses, just send progress update
-      await sendProgressUpdate(
-        env,
-        requestData.userTelegramChatId,
-        status,
-        `Request ID: ${request_id}`
-      );
+      if (chatId) {
+        await sendProgressUpdate(env, chatId, status, `Request ID: ${request_id}`);
+      }
   }
   
   // Update request in KV
   await updateRequest(env, request_id, updates);
   
-  return new Response('OK', {
+  // Append to notification log for Web UI polling
+  const logKey = `notifications:${request_id}`;
+  const existingLog = await env.ACTIONCODE_KV.get<string[]>(logKey, 'json');
+  const logEntries = existingLog || [];
+  logEntries.push(JSON.stringify({
+    status,
+    timestamp: new Date().toISOString(),
+    pr_url,
+    error_message,
+    commit_sha,
+  }));
+  await env.ACTIONCODE_KV.put(logKey, JSON.stringify(logEntries), {
+    expirationTtl: 7 * 24 * 60 * 60,
+  });
+
+  return new Response(JSON.stringify({ success: true }), {
     status: 200,
-    headers: {
-      'Content-Type': 'application/json',
-    },
+    headers: { 'Content-Type': 'application/json' },
   });
 }
 

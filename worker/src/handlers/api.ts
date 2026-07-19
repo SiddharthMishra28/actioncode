@@ -1,8 +1,8 @@
-import type { Env, TriggerPayload, ApiResponse } from '../types';
+import type { Env, TriggerPayload } from '../types';
 import { generateId } from '../utils/crypto';
-import { validateTriggerPayload, createApiResponse, createCorsResponse } from '../utils/validation';
+import { validateTriggerPayload, createApiResponse } from '../utils/validation';
 import { checkRateLimit } from '../utils/rate-limit';
-import { createRequest } from '../services/kv';
+import { createRequest, getRequest, listRequests } from '../services/kv';
 import { triggerWorkflow, validateGithubToken, validateRepositoryAccess } from '../services/github-api';
 
 // Handle API trigger request
@@ -10,18 +10,13 @@ export async function handleApiTrigger(
   request: Request,
   env: Env
 ): Promise<Response> {
-  // Parse request body
   let payload: unknown;
   try {
     payload = await request.json();
-  } catch (error) {
-    return createApiResponse(false, {
-      error: 'Invalid JSON',
-      status: 400,
-    });
+  } catch {
+    return createApiResponse(false, { error: 'Invalid JSON', status: 400 });
   }
   
-  // Validate payload
   if (!validateTriggerPayload(payload)) {
     return createApiResponse(false, {
       error: 'Invalid payload. Required: github_token, repository, instruction',
@@ -49,7 +44,7 @@ export async function handleApiTrigger(
     });
   }
   
-  // Check rate limit (using token hash as identifier)
+  // Check rate limit
   const rateLimit = await checkRateLimit(env, tokenValidation.user || 'unknown');
   if (!rateLimit.allowed) {
     return createApiResponse(false, {
@@ -58,7 +53,6 @@ export async function handleApiTrigger(
     });
   }
   
-  // Generate request ID
   const requestId = generateId();
   
   // Create request in KV
@@ -67,11 +61,11 @@ export async function handleApiTrigger(
     repository,
     branch,
     instruction,
-    userTelegramId: 0, // Not from Telegram
-    userTelegramChatId: '', // Not from Telegram
+    userTelegramId: 0,
+    userTelegramChatId: '',
   });
   
-  // Trigger GitHub Actions
+  // Trigger GitHub Actions — always pass callback_url
   const workflowResult = await triggerWorkflow(env, {
     repository,
     branch,
@@ -82,7 +76,6 @@ export async function handleApiTrigger(
   });
   
   if (!workflowResult.success) {
-    // Update request status
     await createRequest(env, requestId, {
       ...requestData,
       status: 'failed',
@@ -95,7 +88,6 @@ export async function handleApiTrigger(
     });
   }
   
-  // Update request with workflow run ID
   await createRequest(env, requestId, {
     ...requestData,
     status: 'dispatched',
@@ -120,19 +112,13 @@ export async function handleStatusRequest(
   env: Env,
   requestId: string
 ): Promise<Response> {
-  const { getRequest } = await import('../services/kv');
   const requestData = await getRequest(env, requestId);
   
   if (!requestData) {
-    return createApiResponse(false, {
-      error: 'Request not found',
-      status: 404,
-    });
+    return createApiResponse(false, { error: 'Request not found', status: 404 });
   }
   
-  return createApiResponse(true, {
-    data: requestData,
-  });
+  return createApiResponse(true, { data: requestData });
 }
 
 // Handle logs request
@@ -144,14 +130,45 @@ export async function handleLogsRequest(
   const logs = await env.ACTIONCODE_KV.get(`logs:${requestId}`, 'json');
   
   if (!logs) {
-    return createApiResponse(true, {
-      data: { lines: [] },
-    });
+    return createApiResponse(true, { data: { lines: [] } });
   }
   
+  return createApiResponse(true, { data: logs });
+}
+
+// Handle notifications request (for Web UI real-time polling)
+export async function handleNotificationsRequest(
+  env: Env,
+  requestId: string
+): Promise<Response> {
+  const notifications = await env.ACTIONCODE_KV.get<string[]>(
+    `notifications:${requestId}`,
+    'json'
+  );
+  
   return createApiResponse(true, {
-    data: logs,
+    data: { notifications: notifications || [] },
   });
+}
+
+// Handle tasks list request
+export async function handleTasksListRequest(
+  request: Request,
+  env: Env
+): Promise<Response> {
+  const url = new URL(request.url);
+  const limit = parseInt(url.searchParams.get('limit') || '20', 10);
+  const status = url.searchParams.get('status') || undefined;
+  
+  let tasks;
+  if (status) {
+    const { listRequestsByStatus } = await import('../services/kv');
+    tasks = await listRequestsByStatus(env, status);
+  } else {
+    tasks = await listRequests(env, limit);
+  }
+  
+  return createApiResponse(true, { data: { tasks, count: tasks.length } });
 }
 
 // Handle health check
@@ -162,8 +179,6 @@ export async function handleHealthCheck(): Promise<Response> {
     version: '1.0.0',
   }), {
     status: 200,
-    headers: {
-      'Content-Type': 'application/json',
-    },
+    headers: { 'Content-Type': 'application/json' },
   });
 }

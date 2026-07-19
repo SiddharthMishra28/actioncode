@@ -1,17 +1,17 @@
 // Status page logic
 let requestId = null;
 let resumeToken = null;
-let pollInterval = null;
+let stopPolling = null;
 
 // Initialize
 document.addEventListener('DOMContentLoaded', () => {
   const urlParams = new URLSearchParams(window.location.search);
   requestId = urlParams.get('id');
   resumeToken = urlParams.get('resume');
-  
+
   if (requestId) {
     loadStatus();
-    startPolling();
+    stopPolling = startStatusPolling(requestId, updateUI);
   } else if (resumeToken) {
     loadResumeData();
   } else {
@@ -22,10 +22,8 @@ document.addEventListener('DOMContentLoaded', () => {
 // Load status data
 async function loadStatus() {
   if (!requestId) return;
-  
   try {
     const result = await api.getStatus(requestId);
-    
     if (result.success && result.data) {
       updateUI(result.data);
     } else {
@@ -39,10 +37,8 @@ async function loadStatus() {
 // Load resume data
 async function loadResumeData() {
   if (!resumeToken) return;
-  
   try {
     const result = await api.getResumeData(resumeToken);
-    
     if (result.success && result.data) {
       showResumeInfo(result.data);
     } else {
@@ -59,31 +55,29 @@ function updateUI(data) {
   const badge = document.getElementById('status-badge');
   badge.textContent = data.status;
   badge.className = `badge ${data.status}`;
-  
+
   // Update request info
   document.getElementById('request-id').textContent = data.id || '-';
   document.getElementById('repository').textContent = data.repository || '-';
   document.getElementById('branch').textContent = data.branch || '-';
-  document.getElementById('created-at').textContent = data.createdAt 
-    ? new Date(data.createdAt).toLocaleString() 
+  document.getElementById('created-at').textContent = data.createdAt
+    ? new Date(data.createdAt).toLocaleString()
     : '-';
-  
+
   // Update progress steps
   updateProgressSteps(data.status);
-  
+
   // Handle terminal states
   if (data.status === 'completed') {
     showCompleted(data);
-    stopPolling();
   } else if (data.status === 'failed') {
     showError(data.errorMessage || 'Request failed');
-    stopPolling();
   } else if (data.status === 'rate-limited') {
     showRateLimit(data);
-    stopPolling();
   }
-  
-  // Load logs
+
+  // Load notifications and logs
+  loadNotifications();
   loadLogs();
 }
 
@@ -91,18 +85,18 @@ function updateUI(data) {
 function updateProgressSteps(status) {
   const steps = document.querySelectorAll('.step');
   const statusOrder = [
-    'pending', 'validating', 'dispatched', 'running', 
+    'pending', 'validating', 'dispatched', 'running',
     'building', 'testing', 'creating-pr', 'completed'
   ];
-  
+
   const currentIndex = statusOrder.indexOf(status);
-  
-  steps.forEach((step, index) => {
+
+  steps.forEach((step) => {
     const stepStatus = step.dataset.step;
     const stepIndex = statusOrder.indexOf(stepStatus);
-    
+
     step.classList.remove('active', 'completed');
-    
+
     if (stepIndex < currentIndex) {
       step.classList.add('completed');
     } else if (stepIndex === currentIndex) {
@@ -115,9 +109,9 @@ function updateProgressSteps(status) {
 function showCompleted(data) {
   const resultSection = document.getElementById('result-section');
   const prLink = document.getElementById('pr-link');
-  
+
   resultSection.style.display = 'block';
-  
+
   if (data.prUrl) {
     prLink.style.display = 'block';
     document.getElementById('pr-url').href = data.prUrl;
@@ -129,7 +123,7 @@ function showError(message) {
   const resultSection = document.getElementById('result-section');
   const errorMessage = document.getElementById('error-message');
   const errorText = document.getElementById('error-text');
-  
+
   resultSection.style.display = 'block';
   errorMessage.style.display = 'block';
   errorText.textContent = message;
@@ -139,7 +133,7 @@ function showError(message) {
 function showRateLimit(data) {
   const rateLimitSection = document.getElementById('rate-limit-section');
   const resumeTokenDisplay = document.getElementById('resume-token-display');
-  
+
   rateLimitSection.style.display = 'block';
   resumeTokenDisplay.textContent = data.resumeToken || resumeToken || '-';
 }
@@ -147,7 +141,6 @@ function showRateLimit(data) {
 // Show resume info
 function showResumeInfo(data) {
   const statusCard = document.getElementById('status-card');
-  
   statusCard.innerHTML = `
     <h2>Resume Information</h2>
     <div class="request-info">
@@ -178,13 +171,45 @@ function showResumeInfo(data) {
   `;
 }
 
+// Load notifications from Worker
+async function loadNotifications() {
+  if (!requestId) return;
+  try {
+    const result = await api.getNotifications(requestId);
+    if (result.success && result.data && result.data.notifications) {
+      updateNotificationLog(result.data.notifications);
+    }
+  } catch (err) {
+    console.error('Failed to load notifications:', err);
+  }
+}
+
+// Update notification log display
+function updateNotificationLog(notifications) {
+  const container = document.getElementById('notification-log');
+  if (!container || notifications.length === 0) return;
+
+  container.innerHTML = notifications.map((n) => {
+    try {
+      const entry = JSON.parse(n);
+      const time = new Date(entry.timestamp).toLocaleTimeString();
+      let detail = entry.status;
+      if (entry.pr_url) detail += ` → ${entry.pr_url}`;
+      if (entry.error_message) detail += ` — ${entry.error_message}`;
+      return `<div class="notif-entry"><span class="notif-time">${time}</span> ${detail}</div>`;
+    } catch {
+      return `<div class="notif-entry">${n}</div>`;
+    }
+  }).join('');
+
+  container.scrollTop = container.scrollHeight;
+}
+
 // Load logs
 async function loadLogs() {
   if (!requestId) return;
-  
   try {
     const result = await api.getLogs(requestId);
-    
     if (result.success && result.data && result.data.lines) {
       updateLogs(result.data.lines);
     }
@@ -196,35 +221,18 @@ async function loadLogs() {
 // Update logs display
 function updateLogs(lines) {
   const logsContainer = document.getElementById('logs-container');
-  
   if (lines.length === 0) {
     logsContainer.innerHTML = '<span class="log-placeholder">No logs yet...</span>';
     return;
   }
-  
   logsContainer.textContent = lines.join('\n');
   logsContainer.scrollTop = logsContainer.scrollHeight;
 }
 
 // Clear logs
 function clearLogs() {
-  const logsContainer = document.getElementById('logs-container');
-  logsContainer.innerHTML = '<span class="log-placeholder">Logs cleared</span>';
-}
-
-// Start polling for updates
-function startPolling() {
-  pollInterval = setInterval(() => {
-    loadStatus();
-  }, 5000); // Poll every 5 seconds
-}
-
-// Stop polling
-function stopPolling() {
-  if (pollInterval) {
-    clearInterval(pollInterval);
-    pollInterval = null;
-  }
+  document.getElementById('logs-container').innerHTML =
+    '<span class="log-placeholder">Logs cleared</span>';
 }
 
 // Copy resume token to clipboard
@@ -237,5 +245,5 @@ function copyResumeToken() {
 
 // Cleanup on page unload
 window.addEventListener('beforeunload', () => {
-  stopPolling();
+  if (stopPolling) stopPolling();
 });

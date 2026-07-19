@@ -529,6 +529,32 @@ h1 {
   font-size: 0.8rem;
 }
 
+/* Notification log entries */
+.notif-entry {
+  padding: 0.375rem 0;
+  border-bottom: 1px solid var(--border-color);
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.notif-entry:last-child {
+  border-bottom: none;
+}
+
+.notif-time {
+  color: var(--primary-color);
+  font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+  margin-right: 0.5rem;
+}
+
+/* Status header */
+.status-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
 /* Footer */
 footer {
   text-align: center;
