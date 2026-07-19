@@ -129,7 +129,7 @@ const stream = {
       workflow.updateHistoryStatus(workflow.requestId, data.status);
 
       if (data.status === 'completed') {
-        workflow.setStep(5);
+        workflow.setStep(6);
         this.showSummary(data);
       } else if (data.status === 'failed') {
         this.appendOutput('error', `Task failed: ${data.errorMessage || 'Unknown error'}`);
@@ -144,7 +144,7 @@ const stream = {
       card.querySelector('.role-status').textContent = '⏳ Running...';
     }
     this.appendOutput('status', `▶ ${data.role.charAt(0).toUpperCase() + data.role.slice(1)} phase started`);
-    workflow.setStep(2);
+    workflow.setStep(3);
   },
 
   onRoleComplete(data) {
@@ -165,7 +165,7 @@ const stream = {
 
   onCodeChange(data) {
     this.appendOutput('code', data.code || data.diff || JSON.stringify(data));
-    workflow.setStep(3);
+    workflow.setStep(4);
   },
 
   onFileCreate(data) {
@@ -201,7 +201,7 @@ const stream = {
 
   showSummary(data) {
     workflow.stopTimer();
-    workflow.setStep(5);
+    workflow.setStep(6);
 
     const container = document.getElementById('summary-content');
     const isSuccess = data.status === 'completed';

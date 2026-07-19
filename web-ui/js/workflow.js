@@ -1,3 +1,86 @@
+// Markdown Editor
+const mdEditor = {
+  mode: 'write',
+
+  init() {
+    const textarea = document.getElementById('prompt');
+    const charCount = document.getElementById('char-count');
+    if (textarea && charCount) {
+      textarea.addEventListener('input', () => {
+        charCount.textContent = `${textarea.value.length} chars`;
+      });
+    }
+  },
+
+  setMode(mode) {
+    this.mode = mode;
+    const textarea = document.getElementById('prompt');
+    const preview = document.getElementById('md-preview');
+    const btnWrite = document.getElementById('md-btn-write');
+    const btnPreview = document.getElementById('md-btn-preview');
+
+    if (mode === 'write') {
+      textarea.style.display = 'block';
+      preview.style.display = 'none';
+      btnWrite.classList.add('active');
+      btnPreview.classList.remove('active');
+    } else {
+      textarea.style.display = 'none';
+      preview.style.display = 'block';
+      btnWrite.classList.remove('active');
+      btnPreview.classList.add('active');
+      preview.innerHTML = this.renderMarkdown(textarea.value);
+    }
+  },
+
+  insertFormat(before, after) {
+    const textarea = document.getElementById('prompt');
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const selected = textarea.value.substring(start, end);
+    const replacement = before + (selected || 'text') + after;
+    textarea.setRangeText(replacement, start, end, 'select');
+    textarea.focus();
+    textarea.dispatchEvent(new Event('input'));
+  },
+
+  renderMarkdown(text) {
+    if (!text) return '<p style="color:var(--text-dim)">Nothing to preview</p>';
+    let html = this.escapeHtml(text);
+    html = html.replace(/^### (.+)$/gm, '<h3>$1</h3>');
+    html = html.replace(/^## (.+)$/gm, '<h2>$1</h2>');
+    html = html.replace(/^# (.+)$/gm, '<h1>$1</h1>');
+    html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+    html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
+    html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
+    html = html.replace(/```(\w*)\n([\s\S]*?)```/g, '<pre><code>$2</code></pre>');
+    html = html.replace(/^&gt; (.+)$/gm, '<blockquote>$1</blockquote>');
+    html = html.replace(/^- (.+)$/gm, '<li>$1</li>');
+    html = html.replace(/(<li>.*<\/li>\n?)+/g, '<ul>$&</ul>');
+    html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank">$1</a>');
+    html = html.replace(/\n\n/g, '</p><p>');
+    html = '<p>' + html + '</p>';
+    html = html.replace(/<p><\/p>/g, '');
+    html = html.replace(/<p>(<h[1-6]>)/g, '$1');
+    html = html.replace(/(<\/h[1-6]>)<\/p>/g, '$1');
+    html = html.replace(/<p>(<ul>)/g, '$1');
+    html = html.replace(/(<\/ul>)<\/p>/g, '$1');
+    html = html.replace(/<p>(<blockquote>)/g, '$1');
+    html = html.replace(/(<\/blockquote>)<\/p>/g, '$1');
+    html = html.replace(/<p>(<pre>)/g, '$1');
+    html = html.replace(/(<\/pre>)<\/p>/g, '$1');
+    return html;
+  },
+
+  escapeHtml(str) {
+    return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  },
+
+  getContent() {
+    return document.getElementById('prompt').value;
+  }
+};
+
 // Workflow controller — manages step-by-step wizard
 const workflow = {
   currentStep: 1,
@@ -5,6 +88,9 @@ const workflow = {
   taskData: null,
 
   init() {
+    // Initialize markdown editor
+    mdEditor.init();
+
     // Restore token from localStorage
     const savedToken = localStorage.getItem('actioncode_token');
     if (savedToken) {
@@ -58,7 +144,7 @@ const workflow = {
     const token = document.getElementById('github-token').value.trim();
     const repoUrl = document.getElementById('repo-url').value.trim();
     const branch = document.getElementById('branch').value.trim() || 'main';
-    const instruction = document.getElementById('prompt').value.trim();
+    const instruction = mdEditor.getContent().trim();
 
     if (!token || !repoUrl || !instruction) {
       alert('Please fill in all required fields');
@@ -125,7 +211,7 @@ const workflow = {
   },
 
   async runSafetyCheck() {
-    const instruction = document.getElementById('prompt').value.trim();
+    const instruction = mdEditor.getContent().trim();
     const safetyLevel = document.getElementById('safety-level').value;
 
     if (!instruction) {
@@ -218,8 +304,8 @@ const workflow = {
         // Jump to appropriate step based on status
         const statusStepMap = {
           pending: 2, dispatched: 2, validating: 2,
-          running: 3, building: 3, testing: 3, retrying: 3,
-          'creating-pr': 4, completed: 5, failed: 5, 'rate-limited': 5,
+          running: 3, building: 4, testing: 4, retrying: 3,
+          'creating-pr': 5, completed: 6, failed: 6, 'rate-limited': 6,
         };
         this.setStep(statusStepMap[result.data.status] || 2);
         stream.connect(id);
@@ -237,3 +323,7 @@ const workflow = {
     return mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
   },
 };
+
+// Export globals
+window.mdEditor = mdEditor;
+window.workflow = workflow;
