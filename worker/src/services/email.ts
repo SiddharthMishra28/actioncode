@@ -78,9 +78,10 @@ export function buildCompletionEmail(data: TaskCompletionEmail): EmailPayload {
       <h2 style="margin: 0 0 12px 0; font-size: 14px; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.05em;">Task Details</h2>
       <table style="width: 100%; font-size: 13px; border-collapse: collapse;">
         <tr><td style="padding: 4px 0; color: #64748b; width: 120px;">Task ID</td><td style="padding: 4px 0; color: #f8fafc; font-family: monospace;">${escapeHtml(data.requestId)}</td></tr>
-        <tr><td style="padding: 4px 0; color: #64748b;">Repository</td><td style="padding: 4px 0; color: #f8fafc; font-family: monospace;">${escapeHtml(data.repository)}</td></tr>
+        <tr><td style="padding: 4px 0; color: #64748b;">Repository</td><td style="padding: 4px 0; color: #f8fafc; font-family: monospace;"><a href="https://github.com/${escapeHtml(data.repository)}" style="color: #3b82f6; text-decoration: none;">${escapeHtml(data.repository)}</a></td></tr>
         <tr><td style="padding: 4px 0; color: #64748b;">Branch</td><td style="padding: 4px 0; color: #f8fafc; font-family: monospace;">${escapeHtml(data.branch)}</td></tr>
         <tr><td style="padding: 4px 0; color: #64748b;">Duration</td><td style="padding: 4px 0; color: #f8fafc;">${escapeHtml(data.duration)}</td></tr>
+        ${data.commitSha ? `<tr><td style="padding: 4px 0; color: #64748b;">Commit</td><td style="padding: 4px 0; color: #3b82f6; font-family: monospace;"><a href="https://github.com/${escapeHtml(data.repository)}/commit/${escapeHtml(data.commitSha)}" style="color: #3b82f6; text-decoration: none;">${escapeHtml(data.commitSha.slice(0, 7))}</a></td></tr>` : ''}
         <tr><td style="padding: 4px 0; color: #64748b; vertical-align: top;">Instruction</td><td style="padding: 4px 0; color: #f8fafc; font-style: italic;">"${escapeHtml(data.instruction.slice(0, 200))}${data.instruction.length > 200 ? '...' : ''}"</td></tr>
       </table>
     </div>
@@ -164,7 +165,9 @@ export function buildCompletionEmail(data: TaskCompletionEmail): EmailPayload {
     `ActionCode Enterprise — Automated Software Development Harness`,
   ].filter(Boolean).join('\n');
 
-  const subject = `[ActionCode] ${data.status === 'completed' ? 'Task Completed' : 'Task Failed'} — ${data.repository} — ${data.instruction.slice(0, 60)}`;
+  const shortSha = data.commitSha ? data.commitSha.slice(0, 7) : 'no-commit';
+  const shortInstr = data.instruction.slice(0, 50).replace(/[|]/g, '-');
+  const subject = `[ActionCode] ${data.status.toUpperCase()} | ${data.repository}@${data.branch} | ${shortSha} | ${shortInstr}`;
 
   return { to: 'connectwithsiddharthm@gmail.com', subject, html, text };
 }
