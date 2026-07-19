@@ -410,7 +410,7 @@ jobs:
 
       - name: Create Branch and Commit
         id: commit
-        if: inputs.execution_mode == 'full' && steps.build.outputs.BUILD_SUCCESS == 'true' && steps.opencode.outputs.RATE_LIMITED != 'true'
+        if: inputs.execution_mode == 'full' && steps.opencode.outputs.RATE_LIMITED != 'true' && (steps.build.outputs.BUILD_SUCCESS == 'true' || steps.check-empty.outputs.EMPTY == 'true')
         env:
           GH_TOKEN: ${{ steps.git-token.outputs.TOKEN }}
         run: |
