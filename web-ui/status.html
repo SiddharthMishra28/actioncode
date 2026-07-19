@@ -3,145 +3,111 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>ActionCode - Pipeline Status</title>
+  <title>ActionCode Enterprise — Status</title>
   <link rel="stylesheet" href="css/styles.css">
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🤖</text></svg>">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>">
 </head>
 <body>
-  <div class="container">
-    <header>
-      <div class="logo">
-        <span class="logo-icon">🤖</span>
-        <h1>ActionCode</h1>
+  <header class="header-bar">
+    <div class="header-left">
+      <span class="header-logo">⚡</span>
+      <h1 class="header-title">ActionCode <span class="header-badge">Enterprise</span></h1>
+    </div>
+    <div class="header-right">
+      <a href="/" style="color:var(--text-muted);text-decoration:none;font-size:12px">← New Task</a>
+    </div>
+  </header>
+
+  <div class="main-layout" style="margin-top:var(--header-h)">
+    <main class="content" style="max-width:800px;margin:0 auto;padding:32px">
+      <div class="panel-header">
+        <h2>Task Status</h2>
       </div>
-      <p class="tagline">Pipeline Status</p>
-    </header>
 
-    <main>
-      <div class="card" id="status-card">
-        <div class="status-header">
-          <h2>Pipeline Status</h2>
-          <span class="badge" id="status-badge">Loading...</span>
+      <div class="card" style="background:var(--bg-dark);border:1px solid var(--border);border-radius:8px;padding:20px;margin-bottom:16px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+          <h3 style="font-size:16px">Pipeline Status</h3>
+          <span class="badge" id="status-badge" style="font-size:12px;padding:4px 12px;border-radius:12px;background:var(--bg-light);color:var(--text-muted)">Loading...</span>
         </div>
-
-        <div class="request-info" id="request-info">
-          <div class="info-row">
-            <span class="label">Request ID:</span>
-            <span class="value" id="request-id">-</span>
+        <div id="request-info">
+          <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border)">
+            <span style="color:var(--text-dim)">Request ID</span>
+            <span id="request-id" style="font-family:var(--font-mono);font-size:12px">—</span>
           </div>
-          <div class="info-row">
-            <span class="label">Repository:</span>
-            <span class="value" id="repository">-</span>
+          <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border)">
+            <span style="color:var(--text-dim)">Repository</span>
+            <span id="repository" style="font-family:var(--font-mono);font-size:12px">—</span>
           </div>
-          <div class="info-row">
-            <span class="label">Branch:</span>
-            <span class="value" id="branch">-</span>
+          <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border)">
+            <span style="color:var(--text-dim)">Branch</span>
+            <span id="branch" style="font-family:var(--font-mono);font-size:12px">—</span>
           </div>
-          <div class="info-row">
-            <span class="label">Created:</span>
-            <span class="value" id="created-at">-</span>
-          </div>
-        </div>
-
-        <div class="progress-steps" id="progress-steps">
-          <div class="step" data-step="pending">
-            <div class="step-icon">⏳</div>
-            <div class="step-label">Pending</div>
-          </div>
-          <div class="step" data-step="validating">
-            <div class="step-icon">🔍</div>
-            <div class="step-label">Validating</div>
-          </div>
-          <div class="step" data-step="dispatched">
-            <div class="step-icon">📤</div>
-            <div class="step-label">Dispatched</div>
-          </div>
-          <div class="step" data-step="running">
-            <div class="step-icon">🏃</div>
-            <div class="step-label">Running</div>
-          </div>
-          <div class="step" data-step="building">
-            <div class="step-icon">🔨</div>
-            <div class="step-label">Building</div>
-          </div>
-          <div class="step" data-step="testing">
-            <div class="step-icon">🧪</div>
-            <div class="step-label">Testing</div>
-          </div>
-          <div class="step" data-step="creating-pr">
-            <div class="step-icon">🚀</div>
-            <div class="step-label">Creating PR</div>
-          </div>
-          <div class="step" data-step="completed">
-            <div class="step-icon">✅</div>
-            <div class="step-label">Completed</div>
-          </div>
-        </div>
-
-        <div class="result-section" id="result-section" style="display: none;">
-          <div class="pr-link" id="pr-link" style="display: none;">
-            <a id="pr-url" href="#" target="_blank" rel="noopener" class="btn-primary">
-              View Pull Request
-            </a>
-          </div>
-
-          <div class="error-message" id="error-message" style="display: none;">
-            <h3>Error</h3>
-            <p id="error-text"></p>
-          </div>
-        </div>
-
-        <div class="rate-limit-section" id="rate-limit-section" style="display: none;">
-          <div class="warning-box">
-            <h3>⚠️ Rate Limit Hit</h3>
-            <p>OpenCode free model rate limit exceeded. Your progress has been saved.</p>
-            <div class="resume-token-container">
-              <label>Resume Token:</label>
-              <div class="token-display">
-                <code id="resume-token-display"></code>
-                <button onclick="copyResumeToken()" class="btn-small">Copy</button>
-              </div>
-              <small>Expires in 12 hours</small>
-            </div>
-            <div class="resume-instructions">
-              <p>To resume via Telegram:</p>
-              <code>/resume YOUR_TOKEN</code>
-              <p>To resume via web UI:</p>
-              <a href="/" class="btn-secondary">Go to Home Page</a>
-            </div>
+          <div style="display:flex;justify-content:space-between;padding:6px 0">
+            <span style="color:var(--text-dim)">Created</span>
+            <span id="created-at" style="font-size:12px">—</span>
           </div>
         </div>
       </div>
 
-      <div class="card logs-card">
-        <div class="logs-header">
-          <h3>Notification Log</h3>
+      <!-- Progress Steps -->
+      <div style="display:flex;gap:4px;margin-bottom:16px" id="progress-steps">
+        <div class="step-item" data-step="pending" style="flex:1;flex-direction:column;text-align:center;padding:8px 4px;border-radius:6px;background:var(--bg-dark);border:1px solid var(--border)">
+          <div style="font-size:16px">⏳</div>
+          <div style="font-size:10px;color:var(--text-dim);margin-top:4px">Pending</div>
         </div>
-        <div class="logs-container" id="notification-log">
-          <span class="log-placeholder">Waiting for notifications...</span>
+        <div class="step-item" data-step="dispatched" style="flex:1;flex-direction:column;text-align:center;padding:8px 4px;border-radius:6px;background:var(--bg-dark);border:1px solid var(--border)">
+          <div style="font-size:16px">📤</div>
+          <div style="font-size:10px;color:var(--text-dim);margin-top:4px">Dispatched</div>
+        </div>
+        <div class="step-item" data-step="running" style="flex:1;flex-direction:column;text-align:center;padding:8px 4px;border-radius:6px;background:var(--bg-dark);border:1px solid var(--border)">
+          <div style="font-size:16px">🏃</div>
+          <div style="font-size:10px;color:var(--text-dim);margin-top:4px">Running</div>
+        </div>
+        <div class="step-item" data-step="building" style="flex:1;flex-direction:column;text-align:center;padding:8px 4px;border-radius:6px;background:var(--bg-dark);border:1px solid var(--border)">
+          <div style="font-size:16px">🔨</div>
+          <div style="font-size:10px;color:var(--text-dim);margin-top:4px">Building</div>
+        </div>
+        <div class="step-item" data-step="testing" style="flex:1;flex-direction:column;text-align:center;padding:8px 4px;border-radius:6px;background:var(--bg-dark);border:1px solid var(--border)">
+          <div style="font-size:16px">🧪</div>
+          <div style="font-size:10px;color:var(--text-dim);margin-top:4px">Testing</div>
+        </div>
+        <div class="step-item" data-step="completed" style="flex:1;flex-direction:column;text-align:center;padding:8px 4px;border-radius:6px;background:var(--bg-dark);border:1px solid var(--border)">
+          <div style="font-size:16px">✅</div>
+          <div style="font-size:10px;color:var(--text-dim);margin-top:4px">Complete</div>
         </div>
       </div>
 
-      <div class="card logs-card">
-        <div class="logs-header">
-          <h3>Live Logs</h3>
-          <button onclick="clearLogs()" class="btn-small">Clear</button>
+      <!-- Result Section -->
+      <div id="result-section" style="display:none">
+        <div id="pr-link" style="display:none;margin-bottom:16px">
+          <a id="pr-url" href="#" target="_blank" class="summary-link">View Pull Request →</a>
         </div>
-        <pre class="logs-container" id="logs-container">
-          <span class="log-placeholder">Waiting for logs...</span>
+        <div id="error-message" style="display:none;background:var(--error-dim);border:1px solid var(--error);border-radius:8px;padding:16px;margin-bottom:16px">
+          <h3 style="color:var(--error);margin-bottom:8px">Error</h3>
+          <p id="error-text" style="font-size:13px"></p>
+        </div>
+      </div>
+
+      <!-- Logs -->
+      <div style="background:var(--bg-dark);border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:16px">
+        <h3 style="font-size:14px;margin-bottom:8px">Live Logs</h3>
+        <pre id="logs-container" style="font-family:var(--font-mono);font-size:11px;max-height:300px;overflow-y:auto;color:var(--text-muted)">
+          <span style="color:var(--text-dim)">Waiting for logs...</span>
         </pre>
       </div>
     </main>
-
-    <footer>
-      <p>
-        <a href="/">← Back to Home</a>
-        |
-        Powered by 
-        <a href="https://github.com/SiddharthMishra28/actioncode" target="_blank" rel="noopener">ActionCode</a>
-      </p>
-    </footer>
   </div>
+
+  <footer class="status-bar">
+    <div class="status-left">
+      <span id="status-connection">● Connected</span>
+      <span class="status-separator">|</span>
+      <span id="status-task-id">Loading...</span>
+    </div>
+    <div class="status-right">
+      <span>ActionCode Enterprise v2.0</span>
+    </div>
+  </footer>
 
   <script src="js/api.js"></script>
   <script src="js/status.js"></script>

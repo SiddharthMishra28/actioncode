@@ -1,14 +1,10 @@
-// API Configuration
+// API Configuration & Client
 const API_CONFIG = {
-  // Cloudflare Worker URL — update after deploying the worker
   WORKER_URL: 'https://ezcode.shared-drive-temp.workers.dev',
-  // GitHub repository for the actioncode project
   REPO: 'SiddharthMishra28/actioncode',
-  // Polling interval in ms
   POLL_INTERVAL: 5000,
 };
 
-// API Client
 const api = {
   async request(endpoint, options = {}) {
     const url = `${API_CONFIG.WORKER_URL}${endpoint}`;
@@ -29,48 +25,56 @@ const api = {
     }
   },
 
-  // Trigger AI agent
   async trigger(payload) {
-    return this.request('/api/trigger', {
-      method: 'POST',
-      body: JSON.stringify(payload),
-    });
+    return this.request('/api/trigger', { method: 'POST', body: JSON.stringify(payload) });
   },
 
-  // Get request status
   async getStatus(requestId) {
     return this.request(`/api/status/${requestId}`);
   },
 
-  // Get request logs
   async getLogs(requestId) {
     return this.request(`/api/logs/${requestId}`);
   },
 
-  // Get notifications for a request
   async getNotifications(requestId) {
     return this.request(`/api/notifications/${requestId}`);
   },
 
-  // List recent tasks
+  async getEvents(requestId) {
+    return this.request(`/api/events/${requestId}`);
+  },
+
+  async getFiles(requestId) {
+    return this.request(`/api/files/${requestId}`);
+  },
+
+  async getFileContent(requestId, filePath) {
+    return this.request(`/api/files/${requestId}/content?path=${encodeURIComponent(filePath)}`);
+  },
+
+  async safetyCheck(instruction, safetyLevel) {
+    return this.request('/api/safety-check', {
+      method: 'POST',
+      body: JSON.stringify({ instruction, safetyLevel }),
+    });
+  },
+
   async listTasks(limit = 20, status = null) {
     const params = new URLSearchParams({ limit: String(limit) });
     if (status) params.set('status', status);
     return this.request(`/api/tasks?${params}`);
   },
 
-  // Get resume token data
   async getResumeData(token) {
     return this.request(`/api/resume/${token}`);
   },
 
-  // Health check
   async healthCheck() {
     return this.request('/health');
   },
 };
 
-// Polling helper — stops on terminal status
 function startStatusPolling(requestId, onUpdate, interval) {
   const pollMs = interval || API_CONFIG.POLL_INTERVAL;
   let timer = null;
@@ -96,7 +100,6 @@ function startStatusPolling(requestId, onUpdate, interval) {
   return () => clearInterval(timer);
 }
 
-// Export for use in other scripts
 window.api = api;
 window.API_CONFIG = API_CONFIG;
 window.startStatusPolling = startStatusPolling;

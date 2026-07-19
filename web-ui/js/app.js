@@ -1,137 +1,52 @@
-// Form handling
+// Main App Controller
 document.addEventListener('DOMContentLoaded', () => {
-  const form = document.getElementById('trigger-form');
-  const resumeForm = document.getElementById('resume-form');
-  const promptTextarea = document.getElementById('prompt');
-  const charCount = document.getElementById('char-count');
-  
-  // Character count
-  if (promptTextarea && charCount) {
-    promptTextarea.addEventListener('input', () => {
-      charCount.textContent = `${promptTextarea.value.length} characters`;
-    });
-  }
-  
-  // Main form submission
-  if (form) {
-    form.addEventListener('submit', handleSubmit);
-  }
-  
-  // Resume form submission
-  if (resumeForm) {
-    resumeForm.addEventListener('submit', handleResume);
-  }
-  
-  // Check for resume token in URL
-  const urlParams = new URLSearchParams(window.location.search);
-  const resumeToken = urlParams.get('resume');
-  if (resumeToken) {
-    document.getElementById('resume-section').style.display = 'block';
-    document.getElementById('resume-token').value = resumeToken;
-  }
+  workflow.init();
+  loadTaskHistory();
+  checkHealth();
 });
 
-// Handle form submission
-async function handleSubmit(e) {
-  e.preventDefault();
-  
-  const githubToken = document.getElementById('github-token').value.trim();
-  const repoUrl = document.getElementById('repo-url').value.trim();
-  const branch = document.getElementById('branch').value.trim() || 'main';
-  const prompt = document.getElementById('prompt').value.trim();
-  
-  // Validate inputs
-  if (!githubToken || !repoUrl || !prompt) {
-    alert('Please fill in all required fields');
-    return;
-  }
-  
-  // Parse repository from URL
-  const repoMatch = repoUrl.match(/github\.com\/([^/]+)\/([^/]+)/);
-  if (!repoMatch) {
-    alert('Invalid GitHub repository URL. Please enter a valid URL like: https://github.com/user/repo');
-    return;
-  }
-  
-  const repository = `${repoMatch[1]}/${repoMatch[2]}`;
-  
-  // Show loading state
-  const btn = document.getElementById('execute-btn');
-  const spinner = document.getElementById('spinner');
-  const btnText = document.getElementById('btn-text');
-  
-  btn.disabled = true;
-  spinner.style.display = 'inline-block';
-  btnText.textContent = 'Triggering...';
-  
+async function loadTaskHistory() {
   try {
-    const result = await api.trigger({
-      github_token: githubToken,
-      repository,
-      branch,
-      instruction: prompt,
-    });
-    
-    if (result.success && result.request_id) {
-      // Redirect to status page — use relative path from current location
-      const base = window.location.pathname.replace(/\/[^/]*$/, '/');
-      window.location.href = `${base}status.html?id=${result.request_id}`;
-    } else {
-      throw new Error(result.error || 'Failed to trigger pipeline');
+    const result = await api.listTasks(10);
+    if (result.success && result.data && result.data.tasks) {
+      const container = document.getElementById('task-history');
+      const empty = container.querySelector('.task-history-empty');
+      if (empty && result.data.tasks.length > 0) empty.remove();
+
+      for (const task of result.data.tasks.slice(0, 5)) {
+        const item = document.createElement('div');
+        const statusClass = task.status === 'completed' ? 'completed' : task.status === 'failed' ? 'failed' : 'running';
+        item.className = `task-history-item ${statusClass}`;
+        item.dataset.id = task.id;
+        const icon = statusClass === 'completed' ? '✓' : statusClass === 'failed' ? '✗' : '●';
+        item.innerHTML = `
+          <span class="task-icon">${icon}</span>
+          <span class="task-label" title="${task.instruction}">${task.instruction.slice(0, 30)}</span>
+        `;
+        item.onclick = () => workflow.loadTask(task.id);
+        container.appendChild(item);
+      }
     }
-  } catch (error) {
-    alert(`Error: ${error.message}`);
-    btn.disabled = false;
-    spinner.style.display = 'none';
-    btnText.textContent = 'Execute';
-  }
+  } catch {}
 }
 
-// Handle resume form submission
-async function handleResume(e) {
-  e.preventDefault();
-  
-  const token = document.getElementById('resume-token').value.trim();
-  
-  if (!token) {
-    alert('Please enter a resume token');
-    return;
-  }
-  
+async function checkHealth() {
   try {
-    const result = await api.getResumeData(token);
-    
-    if (result.success && result.data) {
-      // Redirect to status page with resume data
-      const base = window.location.pathname.replace(/\/[^/]*$/, '/');
-      window.location.href = `${base}status.html?resume=${token}`;
-    } else {
-      throw new Error(result.error || 'Invalid resume token');
+    const result = await api.healthCheck();
+    const statusEl = document.getElementById('status-connection');
+    const headerStatus = document.getElementById('connection-status');
+    if (result.status === 'healthy') {
+      statusEl.textContent = '● Connected';
+      statusEl.style.color = 'var(--success)';
+      headerStatus.textContent = '● Connected';
+      headerStatus.style.color = 'var(--success)';
     }
-  } catch (error) {
-    alert(`Error: ${error.message}`);
+  } catch {
+    const statusEl = document.getElementById('status-connection');
+    const headerStatus = document.getElementById('connection-status');
+    statusEl.textContent = '● Disconnected';
+    statusEl.style.color = 'var(--error)';
+    headerStatus.textContent = '● Disconnected';
+    headerStatus.style.color = 'var(--error)';
   }
-}
-
-// Toggle preview
-function togglePreview() {
-  const textarea = document.getElementById('prompt');
-  const preview = document.getElementById('preview');
-  
-  if (preview.style.display === 'none') {
-    preview.textContent = textarea.value || '(empty)';
-    preview.style.display = 'block';
-    textarea.style.display = 'none';
-  } else {
-    preview.style.display = 'none';
-    textarea.style.display = 'block';
-  }
-}
-
-// Copy resume token to clipboard
-function copyResumeToken() {
-  const token = document.getElementById('resume-token-display').textContent;
-  navigator.clipboard.writeText(token).then(() => {
-    alert('Resume token copied to clipboard!');
-  });
 }
