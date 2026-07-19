@@ -475,38 +475,33 @@ jobs:
             
             Workflow: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
 
-      - name: Callback - Completed
-        if: always() && steps.commit.outputs.COMMIT_SHA != '' && steps.opencode.outputs.RATE_LIMITED != 'true' && env.CALLBACK_URL != ''
+      - name: Callback - Final Status
+        if: always() && env.CALLBACK_URL != '' && steps.opencode.outputs.RATE_LIMITED != 'true'
         env:
           MODIFIED_FILES: ${{ steps.opencode.outputs.MODIFIED_FILES }}
         run: |
+          # Determine final status
+          if [ -n "${{ steps.commit.outputs.COMMIT_SHA }}" ]; then
+            FINAL_STATUS="completed"
+          elif [ "${{ steps.opencode.outputs.SUCCESS }}" = "true" ]; then
+            FINAL_STATUS="completed"
+          else
+            FINAL_STATUS="failed"
+          fi
+
           MODIFIED_JSON=$(echo "$MODIFIED_FILES" | tr '\n' ',' | sed 's/"/\\"/g')
           curl -s -X POST "${CALLBACK_URL}/webhook/github" \
             -H "Content-Type: application/json" \
             -H "X-Webhook-Secret: ${{ secrets.WEBHOOK_SECRET }}" \
             -d "{
               \"request_id\": \"${REQUEST_ID}\",
-              \"status\": \"completed\",
+              \"status\": \"${FINAL_STATUS}\",
               \"pr_url\": \"${{ steps.pr.outputs.PR_URL || '' }}\",
               \"build_success\": \"${{ steps.build.outputs.BUILD_SUCCESS }}\",
               \"test_success\": \"${{ steps.test.outputs.TEST_SUCCESS }}\",
               \"modified_files\": \"${MODIFIED_JSON}\",
               \"commit_sha\": \"${{ steps.commit.outputs.COMMIT_SHA }}\",
               \"branch\": \"${{ steps.commit.outputs.BRANCH_NAME }}\"
-            }" || true
-
-      - name: Callback - Failed
-        if: always() && steps.commit.outputs.COMMIT_SHA == '' && steps.opencode.outputs.RATE_LIMITED != 'true' && env.CALLBACK_URL != ''
-        run: |
-          curl -s -X POST "${CALLBACK_URL}/webhook/github" \
-            -H "Content-Type: application/json" \
-            -H "X-Webhook-Secret: ${{ secrets.WEBHOOK_SECRET }}" \
-            -d "{
-              \"request_id\": \"${REQUEST_ID}\",
-              \"status\": \"failed\",
-              \"error_message\": \"${{ steps.opencode.outputs.ERROR || 'Workflow failed' }}\",
-              \"build_success\": \"${{ steps.build.outputs.BUILD_SUCCESS }}\",
-              \"test_success\": \"${{ steps.test.outputs.TEST_SUCCESS }}\"
             }" || true
 
       - name: Callback - Rate Limited
