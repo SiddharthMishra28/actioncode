@@ -3,6 +3,8 @@ document.addEventListener('DOMContentLoaded', () => {
   workflow.init();
   loadTaskHistory();
   checkHealth();
+  // Recheck health every 30s
+  setInterval(checkHealth, 30000);
 });
 
 async function loadTaskHistory() {
@@ -13,7 +15,7 @@ async function loadTaskHistory() {
       const empty = container.querySelector('.task-history-empty');
       if (empty && result.data.tasks.length > 0) empty.remove();
 
-      for (const task of result.data.tasks.slice(0, 5)) {
+      for (const task of result.data.tasks.slice(0, 8)) {
         const item = document.createElement('div');
         const statusClass = task.status === 'completed' ? 'completed' : task.status === 'failed' ? 'failed' : 'running';
         item.className = `task-history-item ${statusClass}`;
@@ -27,26 +29,42 @@ async function loadTaskHistory() {
         container.appendChild(item);
       }
     }
-  } catch {}
+  } catch (e) {
+    console.warn('Failed to load task history:', e);
+  }
 }
 
 async function checkHealth() {
+  const statusEl = document.getElementById('status-connection');
+  const headerStatus = document.getElementById('connection-status');
   try {
-    const result = await api.healthCheck();
-    const statusEl = document.getElementById('status-connection');
-    const headerStatus = document.getElementById('connection-status');
-    if (result.status === 'healthy') {
-      statusEl.textContent = '● Connected';
-      statusEl.style.color = 'var(--success)';
-      headerStatus.textContent = '● Connected';
-      headerStatus.style.color = 'var(--success)';
+    const response = await fetch(`${API_CONFIG.WORKER_URL}/health`, {
+      method: 'GET',
+      headers: { 'Accept': 'application/json' },
+    });
+    if (response.ok) {
+      const data = await response.json();
+      if (data.status === 'healthy' || data.status === 'ok') {
+        setConnected(true);
+        return;
+      }
     }
-  } catch {
-    const statusEl = document.getElementById('status-connection');
-    const headerStatus = document.getElementById('connection-status');
-    statusEl.textContent = '● Disconnected';
-    statusEl.style.color = 'var(--error)';
-    headerStatus.textContent = '● Disconnected';
-    headerStatus.style.color = 'var(--error)';
+    setConnected(false);
+  } catch (e) {
+    console.warn('Health check failed:', e);
+    setConnected(false);
+  }
+}
+
+function setConnected(connected) {
+  const statusEl = document.getElementById('status-connection');
+  const headerStatus = document.getElementById('connection-status');
+  if (statusEl) {
+    statusEl.textContent = connected ? '● Connected' : '● Disconnected';
+    statusEl.style.color = connected ? 'var(--success)' : 'var(--error)';
+  }
+  if (headerStatus) {
+    headerStatus.textContent = connected ? '● Connected' : '● Disconnected';
+    headerStatus.style.color = connected ? 'var(--success)' : 'var(--error)';
   }
 }

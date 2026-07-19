@@ -218,7 +218,132 @@ For EACH file modified or created:
 
 ---
 
-## PHASE 4: REVIEWER
+## PHASE 4: TESTER
+
+**Role**: Senior QA Engineer / Test Architect
+**Output**: Comprehensive Test Report with Test Cases
+
+### 4.1 Test Strategy
+Before writing tests, define the strategy:
+- **Test Pyramid**: Unit (70%) → Integration (20%) → E2E (10%)
+- **Coverage Target**: 90%+ statements, 100% critical paths
+- **Risk-Based**: Prioritize tests for high-risk areas (auth, payments, data)
+
+### 4.2 Test Case Design
+
+#### Unit Test Cases
+For EACH function/method:
+- Happy path: Normal input → expected output
+- Edge cases: Empty input, null, undefined, max length, min length
+- Error cases: Invalid input, type mismatch, missing required fields
+- Boundary values: Zero, negative, overflow, special characters
+
+#### Integration Test Cases
+For EACH API endpoint:
+- Valid request → 2xx response with correct body
+- Missing required field → 400 with descriptive error
+- Invalid auth → 401/403
+- Not found → 404
+- Rate limit → 429
+- Conflict → 409
+
+#### Security Test Cases
+For EACH user input:
+- SQL injection: `' OR 1=1 --`, `'; DROP TABLE users; --`
+- XSS: `<script>alert('xss')</script>`, `<img onerror=alert(1)>`
+- Path traversal: `../../etc/passwd`, `..\\..\\windows\\system32`
+- Command injection: `; rm -rf /`, `| cat /etc/passwd`
+- Authentication bypass: Missing token, expired token, wrong token
+
+#### Performance Test Cases
+For EACH critical path:
+- P50 latency < 100ms
+- P95 latency < 500ms
+- P99 latency < 1000ms
+- Throughput > 100 req/s
+- Memory usage stable under load
+
+### 4.3 Test Execution
+```bash
+# Run all tests
+npm test
+
+# Run with coverage
+npm run test:coverage
+
+# Run specific test file
+npm test -- --grep "UserService"
+
+# Run security tests
+npm run test:security
+
+# Run performance tests
+npm run test:performance
+```
+
+### 4.4 Test Report Format
+```markdown
+# Test Report — {Task Name}
+
+## Summary
+| Metric | Value |
+|--------|-------|
+| Total Tests | {N} |
+| Passed | {P} ✅ |
+| Failed | {F} ❌ |
+| Skipped | {S} ⏭️ |
+| Duration | {time} |
+| Coverage | {percentage}% |
+
+## Test Cases
+
+### Unit Tests
+| # | Test Case | Category | Status | Duration |
+|---|-----------|----------|--------|----------|
+| 1 | createUser — valid data | happy path | ✅ | 12ms |
+| 2 | createUser — duplicate email | error | ✅ | 8ms |
+| 3 | createUser — invalid email | validation | ✅ | 5ms |
+
+### Integration Tests
+| # | Endpoint | Scenario | Status | Duration |
+|---|----------|----------|--------|----------|
+| 1 | POST /api/users | 201 created | ✅ | 45ms |
+| 2 | POST /api/users | 400 missing fields | ✅ | 32ms |
+
+### Security Tests
+| # | Vulnerability | Test | Status |
+|---|---------------|------|--------|
+| 1 | SQL Injection | Input field escape | ✅ |
+| 2 | XSS | Output escaping | ✅ |
+| 3 | Auth Bypass | Token validation | ✅ |
+
+### Performance Tests
+| Endpoint | P50 | P95 | P99 | Threshold | Status |
+|----------|-----|-----|-----|-----------|--------|
+| POST /api/users | 12ms | 45ms | 89ms | < 200ms | ✅ |
+
+## Failed Tests
+{Detailed failure info if any}
+
+## Coverage Report
+| Module | Statements | Branches | Functions |
+|--------|-----------|----------|-----------|
+| src/services/user.ts | 95% | 90% | 100% |
+| **Overall** | **96%** | **88%** | **99%** |
+```
+
+### 4.5 Tester Gate
+**Checkpoint**: Do the tests:
+- [ ] Cover all new functionality?
+- [ ] Cover all error paths?
+- [ ] Cover security vulnerabilities?
+- [ ] Meet performance thresholds?
+- [ ] Pass with 90%+ coverage?
+- [ ] Include regression tests for fixed bugs?
+
+---
+
+## PHASE 5: REVIEWER
 
 **Role**: Staff Engineer / Code Reviewer
 **Output**: Review Report with Required Changes
@@ -278,7 +403,7 @@ For EACH file modified or created:
 
 ---
 
-## PHASE 5: DOCUMENTER
+## PHASE 6: DOCUMENTER
 
 **Role**: Technical Writer
 **Output**: Documentation & Changelog
@@ -319,7 +444,7 @@ For EVERY change, update:
 
 ---
 
-## PHASE 6: PM (Product Manager)
+## PHASE 7: PM (Product Manager)
 
 **Role**: Engineering Manager / Release Manager
 **Output**: Release Summary & Metrics
@@ -379,10 +504,11 @@ Trigger notification to `connectwithsiddharthm@gmail.com` with:
 | Safety | 0 | System | No injection, no destructive ops |
 | Architecture | 1 | Architect | ADR complete, patterns followed |
 | Planning | 2 | Planner | Tasks atomic, criteria defined |
-| Implementation | 3 | Engineer | Compiles, tests pass, secure |
-| Code Review | 4 | Reviewer | No CRITICAL/HIGH issues |
-| Documentation | 5 | Writer | Docs updated, changelog entry |
-| Release | 6 | PM | Summary complete, notification sent |
+| Implementation | 3 | Engineer | Compiles, types check, secure |
+| Testing | 4 | Tester | 90%+ coverage, all tests pass |
+| Code Review | 5 | Reviewer | No CRITICAL/HIGH issues |
+| Documentation | 6 | Writer | Docs updated, changelog entry |
+| Release | 7 | PM | Summary complete, notification sent |
 
 ---
 
@@ -435,9 +561,10 @@ When you receive an instruction, execute this sequence:
 2. ARCHITECT → Analyze repo, produce ADR
 3. PLANNER → Break down into tasks
 4. ENGINEER → Implement each task
-5. REVIEWER → Review all changes
-6. DOCUMENTER → Update docs
-7. PM → Generate summary, trigger notification
+5. TESTER → Write and run tests, produce test report
+6. REVIEWER → Review all changes
+7. DOCUMENTER → Update docs
+8. PM → Generate summary, trigger notification
 ```
 
 Each phase MUST complete before the next begins. Each gate MUST pass before proceeding.

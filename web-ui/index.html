@@ -39,7 +39,7 @@
             <div class="step-number">2</div>
             <div class="step-info">
               <div class="step-name">Plan</div>
-              <div class="step-desc">Safety & Analysis</div>
+              <div class="step-desc">Safety & Architecture</div>
             </div>
           </div>
           <div class="step-connector"></div>
@@ -47,20 +47,28 @@
             <div class="step-number">3</div>
             <div class="step-info">
               <div class="step-name">Execute</div>
-              <div class="step-desc">AI Agent Running</div>
+              <div class="step-desc">Code Generation</div>
             </div>
           </div>
           <div class="step-connector"></div>
           <div class="step-item" data-step="4" onclick="workflow.goToStep(4)">
             <div class="step-number">4</div>
             <div class="step-info">
-              <div class="step-name">Review</div>
-              <div class="step-desc">Code & Tests</div>
+              <div class="step-name">Test</div>
+              <div class="step-desc">Quality Assurance</div>
             </div>
           </div>
           <div class="step-connector"></div>
           <div class="step-item" data-step="5" onclick="workflow.goToStep(5)">
             <div class="step-number">5</div>
+            <div class="step-info">
+              <div class="step-name">Review</div>
+              <div class="step-desc">Code Review</div>
+            </div>
+          </div>
+          <div class="step-connector"></div>
+          <div class="step-item" data-step="6" onclick="workflow.goToStep(6)">
+            <div class="step-number">6</div>
             <div class="step-info">
               <div class="step-name">Summary</div>
               <div class="step-desc">Results & PR</div>
@@ -113,14 +121,34 @@
             <div class="form-row">
               <div class="form-group">
                 <label for="prompt">Instruction</label>
-                <textarea id="prompt" rows="4" required placeholder="Describe what you want the AI agent to build, fix, or modify..."></textarea>
-                <div class="editor-toolbar">
-                  <span class="char-count" id="char-count">0 characters</span>
-                  <select id="safety-level" class="select-small">
-                    <option value="standard">Safety: Standard</option>
-                    <option value="strict">Safety: Strict</option>
-                    <option value="permissive">Safety: Permissive</option>
-                  </select>
+                <div class="md-editor" id="md-editor">
+                  <div class="md-editor-toolbar">
+                    <button type="button" class="md-toolbar-btn active" onclick="mdEditor.setMode('write')" id="md-btn-write">Write</button>
+                    <button type="button" class="md-toolbar-btn" onclick="mdEditor.setMode('preview')" id="md-btn-preview">Preview</button>
+                    <span class="md-toolbar-sep"></span>
+                    <button type="button" class="md-toolbar-btn" onclick="mdEditor.insertFormat('**','**')" title="Bold">B</button>
+                    <button type="button" class="md-toolbar-btn" onclick="mdEditor.insertFormat('*','*')" title="Italic" style="font-style:italic">I</button>
+                    <button type="button" class="md-toolbar-btn" onclick="mdEditor.insertFormat('`','`')" title="Code" style="font-family:var(--font-mono)">&lt;/&gt;</button>
+                    <button type="button" class="md-toolbar-btn" onclick="mdEditor.insertFormat('\n- ','')" title="List">•</button>
+                    <button type="button" class="md-toolbar-btn" onclick="mdEditor.insertFormat('```\n','\n```')" title="Code Block">{ }</button>
+                    <button type="button" class="md-toolbar-btn" onclick="mdEditor.insertFormat('> ','')" title="Quote">"</button>
+                    <span class="md-toolbar-sep"></span>
+                    <select id="safety-level" class="select-small" style="margin-left:auto">
+                      <option value="standard">Safety: Standard</option>
+                      <option value="strict">Safety: Strict</option>
+                      <option value="permissive">Safety: Permissive</option>
+                    </select>
+                  </div>
+                  <textarea id="prompt" class="md-editor-write" rows="6" required placeholder="Describe what you want the AI agent to build, fix, or modify...
+
+You can use **markdown** formatting:
+- **Bold** text for emphasis
+- `code` for inline code
+- ```code blocks``` for multi-line code
+- > Quotes for requirements
+- - Lists for multiple items"></textarea>
+                  <div class="md-editor-preview" id="md-preview"></div>
+                  <span class="md-editor-charcount" id="char-count">0 chars</span>
                 </div>
               </div>
             </div>
@@ -193,8 +221,48 @@
         </div>
       </div>
 
-      <!-- Step 4: Review -->
+      <!-- Step 4: Test -->
       <div class="step-panel" id="panel-4">
+        <div class="panel-header">
+          <h2>Testing</h2>
+          <p class="panel-subtitle">Quality assurance and test execution</p>
+        </div>
+        <div class="panel-body">
+          <div id="test-summary" class="result-cards" style="margin-bottom:16px">
+            <div class="result-card" id="test-total">
+              <div class="result-label">Total Tests</div>
+              <div class="result-value">—</div>
+            </div>
+            <div class="result-card" id="test-passed">
+              <div class="result-label">Passed</div>
+              <div class="result-value">—</div>
+            </div>
+            <div class="result-card" id="test-failed">
+              <div class="result-label">Failed</div>
+              <div class="result-value">—</div>
+            </div>
+            <div class="result-card" id="test-coverage">
+              <div class="result-label">Coverage</div>
+              <div class="result-value">—</div>
+            </div>
+          </div>
+          <div id="test-cases" class="review-section">
+            <h3>Test Cases</h3>
+            <div id="test-case-list" class="files-list">
+              <div class="files-empty">Test results will appear here...</div>
+            </div>
+          </div>
+          <div id="test-output-section" class="review-section" style="margin-top:16px">
+            <h3>Test Output</h3>
+            <pre id="test-output" class="execute-output" style="max-height:300px">
+              <span class="output-line system">Waiting for test execution...</span>
+            </pre>
+          </div>
+        </div>
+      </div>
+
+      <!-- Step 5: Review -->
+      <div class="step-panel" id="panel-5">
         <div class="panel-header">
           <h2>Review</h2>
           <p class="panel-subtitle">Code changes and test results</p>
@@ -226,8 +294,8 @@
         </div>
       </div>
 
-      <!-- Step 5: Summary -->
-      <div class="step-panel" id="panel-5">
+      <!-- Step 6: Summary -->
+      <div class="step-panel" id="panel-6">
         <div class="panel-header">
           <h2>Summary</h2>
           <p class="panel-subtitle">Task complete — here are the results</p>
