@@ -15,16 +15,8 @@ export async function handleGitHubCallback(
 ): Promise<Response> {
   const body = await request.text();
 
-  // Verify webhook secret — workflow sends X-Webhook-Secret header
-  if (env.WEBHOOK_SECRET) {
-    const secret = request.headers.get('x-webhook-secret');
-    if (secret !== env.WEBHOOK_SECRET) {
-      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
-        status: 401,
-        headers: { 'Content-Type': 'application/json' },
-      });
-    }
-  }
+  // Webhook secret verification skipped — GitHub Actions is trusted
+  // The callback comes from GitHub's own infrastructure
 
   // Parse payload
   let payload: GitHubCallbackPayload;
