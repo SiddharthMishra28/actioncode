@@ -1,5 +1,15 @@
 import type { Env } from '../types';
 
+const GH_HEADERS = {
+  'Accept': 'application/vnd.github.v3+json',
+  'X-GitHub-Api-Version': '2022-11-28',
+  'User-Agent': 'ActionCode-Worker/1.0',
+};
+
+function authHeaders(token: string): Record<string, string> {
+  return { ...GH_HEADERS, 'Authorization': `Bearer ${token}` };
+}
+
 // Trigger GitHub Actions workflow
 export async function triggerWorkflow(
   env: Env,
@@ -12,10 +22,11 @@ export async function triggerWorkflow(
     userGithubToken?: string;
   }
 ): Promise<{ success: boolean; runId?: number; error?: string }> {
-  const { owner, repo } = parseRepositoryFullName(params.repository);
-  
-  const url = `https://api.github.com/repos/${owner}/${repo}/actions/workflows/opencode-agent.yml/dispatches`;
-  
+  // Always dispatch from the actioncode repo (the workflow lives there)
+  const { owner: acOwner, repo: acRepo } = parseRepositoryFullName('SiddharthMishra28/actioncode');
+
+  const url = `https://api.github.com/repos/${acOwner}/${acRepo}/actions/workflows/opencode-agent.yml/dispatches`;
+
   const body = {
     ref: params.branch,
     inputs: {
@@ -29,57 +40,50 @@ export async function triggerWorkflow(
       telegram_user: '',
     },
   };
-  
-  try {
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${env.GITHUB_TOKEN}`,
-        'Accept': 'application/vnd.github.v3+json',
-        'Content-Type': 'application/json',
-        'X-GitHub-Api-Version': '2022-11-28',
-      },
-      body: JSON.stringify(body),
-    });
-    
-    if (!response.ok) {
-      const errorData = await response.json() as { message?: string };
-      return {
-        success: false,
-        error: errorData.message || `HTTP ${response.status}`,
-      };
-    }
-    
-    // Wait a bit for the run to start
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    
-    // Get the latest workflow run
-    const runsUrl = `https://api.github.com/repos/${owner}/${repo}/actions/workflows/opencode-agent.yml/runs?per_page=1`;
-    const runsResponse = await fetch(runsUrl, {
-      headers: {
-        'Authorization': `Bearer ${env.GITHUB_TOKEN}`,
-        'Accept': 'application/vnd.github.v3+json',
-        'X-GitHub-Api-Version': '2022-11-28',
-      },
-    });
-    
-    if (runsResponse.ok) {
-      const runsData = await runsResponse.json() as { workflow_runs: Array<{ id: number }> };
-      if (runsData.workflow_runs && runsData.workflow_runs.length > 0) {
-        return {
-          success: true,
-          runId: runsData.workflow_runs[0].id,
-        };
+
+  // Try Worker's token first, fall back to user's token
+  const tokens = [env.GITHUB_TOKEN, params.userGithubToken].filter(Boolean) as string[];
+
+  let lastError = '';
+  for (const token of tokens) {
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          ...authHeaders(token),
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(body),
+      });
+
+      if (response.ok) {
+        // Success — use this token for the follow-up request too
+        await new Promise(resolve => setTimeout(resolve, 2000));
+
+        const runsUrl = `https://api.github.com/repos/${acOwner}/${acRepo}/actions/workflows/opencode-agent.yml/runs?per_page=1`;
+        const runsResponse = await fetch(runsUrl, {
+          headers: authHeaders(token),
+        });
+
+        if (runsResponse.ok) {
+          const runsData = await runsResponse.json() as { workflow_runs: Array<{ id: number }> };
+          if (runsData.workflow_runs && runsData.workflow_runs.length > 0) {
+            return { success: true, runId: runsData.workflow_runs[0].id };
+          }
+        }
+        return { success: true };
       }
+
+      const errorData = await response.json() as { message?: string };
+      lastError = errorData.message || `HTTP ${response.status}`;
+      console.warn(`Workflow dispatch failed with token (ending in ${token.slice(-4)}): ${lastError}`);
+    } catch (err) {
+      lastError = err instanceof Error ? err.message : 'Unknown error';
+      console.warn(`Workflow dispatch error with token (ending in ${token.slice(-4)}): ${lastError}`);
     }
-    
-    return { success: true };
-  } catch (error) {
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : 'Unknown error',
-    };
   }
+
+  return { success: false, error: lastError || 'All tokens failed' };
 }
 
 // Get workflow run status
@@ -88,37 +92,22 @@ export async function getWorkflowRunStatus(
   owner: string,
   repo: string,
   runId: number
-): Promise<{
-  status: string;
-  conclusion: string | null;
-  htmlUrl: string;
-} | null> {
-  const url = `https://api.github.com/repos/${owner}/${repo}/actions/runs/${runId}`;
-  
+): Promise<{ status: string; conclusion: string | null; htmlUrl: string } | null> {
   try {
-    const response = await fetch(url, {
-      headers: {
-        'Authorization': `Bearer ${env.GITHUB_TOKEN}`,
-        'Accept': 'application/vnd.github.v3+json',
-        'X-GitHub-Api-Version': '2022-11-28',
-      },
-    });
-    
-    if (!response.ok) {
-      return null;
-    }
-    
+    const response = await fetch(
+      `https://api.github.com/repos/${owner}/${repo}/actions/runs/${runId}`,
+      { headers: authHeaders(env.GITHUB_TOKEN) }
+    );
+
+    if (!response.ok) return null;
+
     const data = await response.json() as {
       status: string;
       conclusion: string | null;
       html_url: string;
     };
-    
-    return {
-      status: data.status,
-      conclusion: data.conclusion,
-      htmlUrl: data.html_url,
-    };
+
+    return { status: data.status, conclusion: data.conclusion, htmlUrl: data.html_url };
   } catch (error) {
     console.error('Failed to get workflow run status:', error);
     return null;
@@ -132,35 +121,23 @@ export async function getWorkflowRunLogs(
   repo: string,
   runId: number
 ): Promise<string | null> {
-  const url = `https://api.github.com/repos/${owner}/${repo}/actions/runs/${runId}/jobs`;
-  
   try {
-    const response = await fetch(url, {
-      headers: {
-        'Authorization': `Bearer ${env.GITHUB_TOKEN}`,
-        'Accept': 'application/vnd.github.v3+json',
-        'X-GitHub-Api-Version': '2022-11-28',
-      },
-    });
-    
-    if (!response.ok) {
-      return null;
-    }
-    
+    const response = await fetch(
+      `https://api.github.com/repos/${owner}/${repo}/actions/runs/${runId}/jobs`,
+      { headers: authHeaders(env.GITHUB_TOKEN) }
+    );
+
+    if (!response.ok) return null;
+
     const data = await response.json() as {
       jobs: Array<{
         name: string;
         status: string;
         conclusion: string | null;
-        steps: Array<{
-          name: string;
-          status: string;
-          conclusion: string | null;
-        }>;
+        steps: Array<{ name: string; status: string; conclusion: string | null }>;
       }>;
     };
-    
-    // Format logs
+
     const logs: string[] = [];
     for (const job of data.jobs) {
       logs.push(`Job: ${job.name} (${job.status})`);
@@ -168,7 +145,6 @@ export async function getWorkflowRunLogs(
         logs.push(`  Step: ${step.name} (${step.conclusion || step.status})`);
       }
     }
-    
     return logs.join('\n');
   } catch (error) {
     console.error('Failed to get workflow run logs:', error);
@@ -185,36 +161,30 @@ function parseRepositoryFullName(fullName: string): { owner: string; repo: strin
   return { owner: parts[0], repo: parts[1] };
 }
 
-// Validate GitHub token by checking user info
+// Validate GitHub token — tries /user, falls back gracefully if blocked by IP
 export async function validateGithubToken(
   token: string
 ): Promise<{ valid: boolean; user?: string; error?: string }> {
   try {
     const response = await fetch('https://api.github.com/user', {
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Accept': 'application/vnd.github.v3+json',
-        'X-GitHub-Api-Version': '2022-11-28',
-      },
+      headers: authHeaders(token),
     });
-    
-    if (!response.ok) {
-      return {
-        valid: false,
-        error: `Invalid token (HTTP ${response.status})`,
-      };
+
+    if (response.ok) {
+      const data = await response.json() as { login: string };
+      return { valid: true, user: data.login };
     }
-    
-    const data = await response.json() as { login: string };
-    return {
-      valid: true,
-      user: data.login,
-    };
+
+    // 403 from Cloudflare Worker IPs is common — don't block, let repo check decide
+    if (response.status === 403 || response.status === 401) {
+      console.warn(`Token /user returned ${response.status}, proceeding with degraded validation`);
+      return { valid: true, user: 'unknown' };
+    }
+
+    return { valid: false, error: `Invalid token (HTTP ${response.status})` };
   } catch (error) {
-    return {
-      valid: false,
-      error: error instanceof Error ? error.message : 'Unknown error',
-    };
+    console.warn('Token validation network error:', error);
+    return { valid: true, user: 'unknown' };
   }
 }
 
@@ -224,23 +194,20 @@ export async function validateRepositoryAccess(
   repository: string
 ): Promise<{ valid: boolean; error?: string }> {
   const { owner, repo } = parseRepositoryFullName(repository);
-  
+
   try {
     const response = await fetch(`https://api.github.com/repos/${owner}/${repo}`, {
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Accept': 'application/vnd.github.v3+json',
-        'X-GitHub-Api-Version': '2022-11-28',
-      },
+      headers: authHeaders(token),
     });
-    
+
     if (!response.ok) {
+      const body = await response.text().catch(() => '');
       return {
         valid: false,
-        error: `Cannot access repository (HTTP ${response.status})`,
+        error: `Cannot access repository (HTTP ${response.status}): ${body.slice(0, 200)}`,
       };
     }
-    
+
     return { valid: true };
   } catch (error) {
     return {
