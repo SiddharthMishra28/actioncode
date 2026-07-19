@@ -123,7 +123,10 @@ jobs:
             -H "User-Agent: ActionCode-Worker/1.0" \
             "https://api.github.com/repos/${{ inputs.repository }}/git/refs/heads/${{ inputs.branch }}")
           
-          if [ "$REPO_RESPONSE" = "404" ]; then
+          echo "API response: HTTP $REPO_RESPONSE"
+          
+          # 404 = branch not found, 409 = repo is empty
+          if [ "$REPO_RESPONSE" = "404" ] || [ "$REPO_RESPONSE" = "409" ]; then
             echo "EMPTY=true" >> $GITHUB_OUTPUT
             echo "Repository is empty or branch '${{ inputs.branch }}' does not exist"
           else
