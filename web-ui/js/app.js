@@ -73,8 +73,9 @@ async function handleSubmit(e) {
     });
     
     if (result.success && result.request_id) {
-      // Redirect to status page
-      window.location.href = `/status.html?id=${result.request_id}`;
+      // Redirect to status page — use relative path from current location
+      const base = window.location.pathname.replace(/\/[^/]*$/, '/');
+      window.location.href = `${base}status.html?id=${result.request_id}`;
     } else {
       throw new Error(result.error || 'Failed to trigger pipeline');
     }
@@ -102,7 +103,8 @@ async function handleResume(e) {
     
     if (result.success && result.data) {
       // Redirect to status page with resume data
-      window.location.href = `/status.html?resume=${token}`;
+      const base = window.location.pathname.replace(/\/[^/]*$/, '/');
+      window.location.href = `${base}status.html?resume=${token}`;
     } else {
       throw new Error(result.error || 'Invalid resume token');
     }

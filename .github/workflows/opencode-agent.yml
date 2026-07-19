@@ -114,12 +114,39 @@ jobs:
           fi
 
       - name: Checkout Target Repository
+        id: checkout
         uses: actions/checkout@v4
+        continue-on-error: true
         with:
           repository: ${{ inputs.repository }}
           ref: ${{ inputs.branch }}
           token: ${{ steps.git-token.outputs.TOKEN }}
           fetch-depth: 0
+
+      - name: Fallback Checkout (try default branch)
+        if: steps.checkout.outcome == 'failure'
+        uses: actions/checkout@v4
+        continue-on-error: true
+        with:
+          repository: ${{ inputs.repository }}
+          token: ${{ steps.git-token.outputs.TOKEN }}
+          fetch-depth: 0
+
+      - name: Check Repository Status
+        id: repo-status
+        run: |
+          if [ ! -d ".git" ]; then
+            echo "REPO_EMPTY=true" >> $GITHUB_OUTPUT
+            echo "Target repository is empty or inaccessible"
+            git init
+            git config user.name "ActionCode Bot"
+            git config user.email "actioncode@bot.github.com"
+          else
+            echo "REPO_EMPTY=false" >> $GITHUB_OUTPUT
+            echo "Repository checked out successfully"
+            echo "Branch: $(git branch --show-current)"
+            echo "Files: $(find . -type f -not -path '*/.git/*' | wc -l)"
+          fi
 
       - name: Send Progress - Checkout Complete
         uses: appleboy/telegram-action@v1.0.0
@@ -127,7 +154,8 @@ jobs:
         with:
           token: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           chat_id: ${{ inputs.telegram_chat_id }}
-          message: "📥 Repository Checked Out"
+          message: |
+            📥 Repository ${{ steps.repo-status.outputs.REPO_EMPTY == 'true' && 'Initialized (empty)' || 'Checked Out' }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -256,7 +284,7 @@ jobs:
 
       - name: Build Project
         id: build
-        if: inputs.execution_mode == 'full' && steps.opencode.outputs.SUCCESS == 'true'
+        if: inputs.execution_mode == 'full' && steps.opencode.outputs.SUCCESS == 'true' && steps.repo-status.outputs.REPO_EMPTY != 'true'
         run: |
           echo "Building project..."
           
@@ -284,7 +312,7 @@ jobs:
 
       - name: Run Tests
         id: test
-        if: inputs.execution_mode == 'full' && steps.build.outputs.BUILD_SUCCESS == 'true'
+        if: inputs.execution_mode == 'full' && steps.build.outputs.BUILD_SUCCESS == 'true' && steps.repo-status.outputs.REPO_EMPTY != 'true'
         run: |
           echo "Running tests..."
           
