@@ -2,15 +2,42 @@
 export interface Env {
   // KV Namespace
   ACTIONCODE_KV: KVNamespace;
-  
+
   // Secrets
   TELEGRAM_BOT_TOKEN: string;
   GITHUB_TOKEN: string;
   WEBHOOK_SECRET: string;
-  
+
   // Environment variables
   ENVIRONMENT: string;
   WORKER_URL: string;
+}
+
+// Development roles for the harness
+export type DevRole = 'architect' | 'planner' | 'engineer' | 'reviewer' | 'pm';
+
+export interface RoleResult {
+  role: DevRole;
+  status: 'pending' | 'running' | 'completed' | 'failed';
+  output: string;
+  files?: string[];
+  startedAt?: string;
+  completedAt?: string;
+  duration?: string;
+}
+
+export interface HarnessPlan {
+  requestId: string;
+  roles: RoleResult[];
+  safetyLevel: 'strict' | 'standard' | 'permissive';
+  safetyPassed: boolean;
+  safetyFindings?: Array<{ severity: string; category: string; message: string }>;
+}
+
+export interface TaskEvent {
+  type: 'role-start' | 'role-complete' | 'thought' | 'code-change' | 'file-create' | 'status-update' | 'summary' | 'error';
+  timestamp: string;
+  data: Record<string, unknown>;
 }
 
 // Request status

@@ -4,6 +4,7 @@ import { validateTriggerPayload, createApiResponse } from '../utils/validation';
 import { checkRateLimit } from '../utils/rate-limit';
 import { createRequest, getRequest, listRequests } from '../services/kv';
 import { triggerWorkflow, validateGithubToken, validateRepositoryAccess } from '../services/github-api';
+import { runSafetyCheck } from '../services/safety';
 
 // Handle API trigger request
 export async function handleApiTrigger(
@@ -176,9 +177,37 @@ export async function handleHealthCheck(): Promise<Response> {
   return new Response(JSON.stringify({
     status: 'healthy',
     timestamp: new Date().toISOString(),
-    version: '1.0.0',
+    version: '2.0.0-enterprise',
   }), {
     status: 200,
     headers: { 'Content-Type': 'application/json' },
+  });
+}
+
+// Handle safety check
+export async function handleSafetyCheck(
+  request: Request,
+  env: Env
+): Promise<Response> {
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    return createApiResponse(false, { error: 'Invalid JSON', status: 400 });
+  }
+
+  const { instruction, safetyLevel } = body as { instruction?: string; safetyLevel?: 'strict' | 'standard' | 'permissive' };
+  if (!instruction) {
+    return createApiResponse(false, { error: 'Missing instruction', status: 400 });
+  }
+
+  const result = runSafetyCheck(instruction, safetyLevel || 'standard');
+
+  return createApiResponse(true, {
+    data: {
+      passed: result.passed,
+      riskLevel: result.riskLevel,
+      findings: result.findings,
+    },
   });
 }

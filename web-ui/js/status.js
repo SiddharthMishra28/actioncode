@@ -1,249 +1,86 @@
 // Status page logic
 let requestId = null;
-let resumeToken = null;
-let stopPolling = null;
+let stopPoll = null;
 
-// Initialize
 document.addEventListener('DOMContentLoaded', () => {
   const urlParams = new URLSearchParams(window.location.search);
   requestId = urlParams.get('id');
-  resumeToken = urlParams.get('resume');
 
   if (requestId) {
+    document.getElementById('status-task-id').textContent = `Task: ${requestId.slice(0, 8)}...`;
     loadStatus();
-    stopPolling = startStatusPolling(requestId, updateUI);
-  } else if (resumeToken) {
-    loadResumeData();
+    stopPoll = startStatusPolling(requestId, updateUI);
   } else {
-    showError('No request ID provided');
+    document.getElementById('logs-container').innerHTML = '<span style="color:var(--error)">No request ID provided</span>';
   }
 });
 
-// Load status data
 async function loadStatus() {
   if (!requestId) return;
   try {
     const result = await api.getStatus(requestId);
-    if (result.success && result.data) {
-      updateUI(result.data);
-    } else {
-      showError(result.error || 'Failed to load status');
-    }
+    if (result.success && result.data) updateUI(result.data);
   } catch (error) {
-    showError(error.message);
+    document.getElementById('logs-container').innerHTML = `<span style="color:var(--error)">${error.message}</span>`;
   }
 }
 
-// Load resume data
-async function loadResumeData() {
-  if (!resumeToken) return;
-  try {
-    const result = await api.getResumeData(resumeToken);
-    if (result.success && result.data) {
-      showResumeInfo(result.data);
-    } else {
-      showError(result.error || 'Invalid resume token');
-    }
-  } catch (error) {
-    showError(error.message);
-  }
-}
-
-// Update UI with status data
 function updateUI(data) {
-  // Update status badge
+  // Badge
   const badge = document.getElementById('status-badge');
   badge.textContent = data.status;
-  badge.className = `badge ${data.status}`;
+  badge.style.background = data.status === 'completed' ? 'var(--success-dim)' :
+    data.status === 'failed' ? 'var(--error-dim)' : 'var(--primary-dim)';
+  badge.style.color = data.status === 'completed' ? 'var(--success)' :
+    data.status === 'failed' ? 'var(--error)' : 'var(--primary)';
 
-  // Update request info
-  document.getElementById('request-id').textContent = data.id || '-';
-  document.getElementById('repository').textContent = data.repository || '-';
-  document.getElementById('branch').textContent = data.branch || '-';
-  document.getElementById('created-at').textContent = data.createdAt
-    ? new Date(data.createdAt).toLocaleString()
-    : '-';
+  // Info
+  document.getElementById('request-id').textContent = data.id || '—';
+  document.getElementById('repository').textContent = data.repository || '—';
+  document.getElementById('branch').textContent = data.branch || '—';
+  document.getElementById('created-at').textContent = data.createdAt ? new Date(data.createdAt).toLocaleString() : '—';
 
-  // Update progress steps
-  updateProgressSteps(data.status);
+  // Progress steps
+  const statusOrder = ['pending', 'dispatched', 'running', 'building', 'testing', 'completed'];
+  const currentIndex = statusOrder.indexOf(data.status);
+  document.querySelectorAll('#progress-steps .step-item').forEach(el => {
+    const stepStatus = el.dataset.step;
+    const stepIndex = statusOrder.indexOf(stepStatus);
+    el.style.borderColor = stepIndex < currentIndex ? 'var(--success)' :
+      stepIndex === currentIndex ? 'var(--primary)' : 'var(--border)';
+    el.style.background = stepIndex < currentIndex ? 'var(--success-dim)' :
+      stepIndex === currentIndex ? 'var(--primary-dim)' : 'var(--bg-dark)';
+  });
 
-  // Handle terminal states
-  if (data.status === 'completed') {
-    showCompleted(data);
-  } else if (data.status === 'failed') {
-    showError(data.errorMessage || 'Request failed');
-  } else if (data.status === 'rate-limited') {
-    showRateLimit(data);
+  // Terminal states
+  const terminal = ['completed', 'failed', 'rate-limited', 'cancelled'];
+  if (terminal.includes(data.status)) {
+    if (stopPoll) stopPoll();
+    const resultSection = document.getElementById('result-section');
+    resultSection.style.display = 'block';
+
+    if (data.status === 'completed' && data.prUrl) {
+      document.getElementById('pr-link').style.display = 'block';
+      document.getElementById('pr-url').href = data.prUrl;
+    }
+    if (data.status === 'failed') {
+      document.getElementById('error-message').style.display = 'block';
+      document.getElementById('error-text').textContent = data.errorMessage || 'Request failed';
+    }
   }
 
-  // Load notifications and logs
-  loadNotifications();
+  // Load logs
   loadLogs();
 }
 
-// Update progress steps
-function updateProgressSteps(status) {
-  const steps = document.querySelectorAll('.step');
-  const statusOrder = [
-    'pending', 'validating', 'dispatched', 'running',
-    'building', 'testing', 'creating-pr', 'completed'
-  ];
-
-  const currentIndex = statusOrder.indexOf(status);
-
-  steps.forEach((step) => {
-    const stepStatus = step.dataset.step;
-    const stepIndex = statusOrder.indexOf(stepStatus);
-
-    step.classList.remove('active', 'completed');
-
-    if (stepIndex < currentIndex) {
-      step.classList.add('completed');
-    } else if (stepIndex === currentIndex) {
-      step.classList.add('active');
-    }
-  });
-}
-
-// Show completed state
-function showCompleted(data) {
-  const resultSection = document.getElementById('result-section');
-  const prLink = document.getElementById('pr-link');
-
-  resultSection.style.display = 'block';
-
-  if (data.prUrl) {
-    prLink.style.display = 'block';
-    document.getElementById('pr-url').href = data.prUrl;
-  }
-}
-
-// Show error state
-function showError(message) {
-  const resultSection = document.getElementById('result-section');
-  const errorMessage = document.getElementById('error-message');
-  const errorText = document.getElementById('error-text');
-
-  resultSection.style.display = 'block';
-  errorMessage.style.display = 'block';
-  errorText.textContent = message;
-}
-
-// Show rate limit state
-function showRateLimit(data) {
-  const rateLimitSection = document.getElementById('rate-limit-section');
-  const resumeTokenDisplay = document.getElementById('resume-token-display');
-
-  rateLimitSection.style.display = 'block';
-  resumeTokenDisplay.textContent = data.resumeToken || resumeToken || '-';
-}
-
-// Show resume info
-function showResumeInfo(data) {
-  const statusCard = document.getElementById('status-card');
-  statusCard.innerHTML = `
-    <h2>Resume Information</h2>
-    <div class="request-info">
-      <div class="info-row">
-        <span class="label">Original Request:</span>
-        <span class="value">${data.requestId || '-'}</span>
-      </div>
-      <div class="info-row">
-        <span class="label">Branch:</span>
-        <span class="value">${data.branch || '-'}</span>
-      </div>
-      <div class="info-row">
-        <span class="label">Completed Steps:</span>
-        <span class="value">${(data.completedSteps || []).join(', ') || '-'}</span>
-      </div>
-      <div class="info-row">
-        <span class="label">Expires:</span>
-        <span class="value">${data.expiresAt ? new Date(data.expiresAt).toLocaleString() : '-'}</span>
-      </div>
-    </div>
-    <div style="margin-top: 1.5rem;">
-      <h3>Remaining Instruction</h3>
-      <p style="margin-top: 0.5rem; color: var(--text-muted);">${data.remainingInstruction || '-'}</p>
-    </div>
-    <div style="margin-top: 1.5rem;">
-      <a href="/" class="btn-primary" style="display: inline-flex;">Start New Request</a>
-    </div>
-  `;
-}
-
-// Load notifications from Worker
-async function loadNotifications() {
-  if (!requestId) return;
-  try {
-    const result = await api.getNotifications(requestId);
-    if (result.success && result.data && result.data.notifications) {
-      updateNotificationLog(result.data.notifications);
-    }
-  } catch (err) {
-    console.error('Failed to load notifications:', err);
-  }
-}
-
-// Update notification log display
-function updateNotificationLog(notifications) {
-  const container = document.getElementById('notification-log');
-  if (!container || notifications.length === 0) return;
-
-  container.innerHTML = notifications.map((n) => {
-    try {
-      const entry = JSON.parse(n);
-      const time = new Date(entry.timestamp).toLocaleTimeString();
-      let detail = entry.status;
-      if (entry.pr_url) detail += ` → ${entry.pr_url}`;
-      if (entry.error_message) detail += ` — ${entry.error_message}`;
-      return `<div class="notif-entry"><span class="notif-time">${time}</span> ${detail}</div>`;
-    } catch {
-      return `<div class="notif-entry">${n}</div>`;
-    }
-  }).join('');
-
-  container.scrollTop = container.scrollHeight;
-}
-
-// Load logs
 async function loadLogs() {
   if (!requestId) return;
   try {
     const result = await api.getLogs(requestId);
-    if (result.success && result.data && result.data.lines) {
-      updateLogs(result.data.lines);
+    if (result.success && result.data && result.data.lines && result.data.lines.length > 0) {
+      document.getElementById('logs-container').textContent = result.data.lines.join('\n');
     }
-  } catch (error) {
-    console.error('Failed to load logs:', error);
-  }
+  } catch {}
 }
 
-// Update logs display
-function updateLogs(lines) {
-  const logsContainer = document.getElementById('logs-container');
-  if (lines.length === 0) {
-    logsContainer.innerHTML = '<span class="log-placeholder">No logs yet...</span>';
-    return;
-  }
-  logsContainer.textContent = lines.join('\n');
-  logsContainer.scrollTop = logsContainer.scrollHeight;
-}
-
-// Clear logs
-function clearLogs() {
-  document.getElementById('logs-container').innerHTML =
-    '<span class="log-placeholder">Logs cleared</span>';
-}
-
-// Copy resume token to clipboard
-function copyResumeToken() {
-  const token = document.getElementById('resume-token-display').textContent;
-  navigator.clipboard.writeText(token).then(() => {
-    alert('Resume token copied to clipboard!');
-  });
-}
-
-// Cleanup on page unload
-window.addEventListener('beforeunload', () => {
-  if (stopPolling) stopPolling();
-});
+window.addEventListener('beforeunload', () => { if (stopPoll) stopPoll(); });

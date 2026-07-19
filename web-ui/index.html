@@ -3,154 +3,294 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>ActionCode - AI Coding Agent</title>
+  <title>ActionCode Enterprise</title>
   <link rel="stylesheet" href="css/styles.css">
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🤖</text></svg>">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>">
 </head>
 <body>
-  <div class="container">
-    <header>
-      <div class="logo">
-        <span class="logo-icon">🤖</span>
-        <h1>ActionCode</h1>
-      </div>
-      <p class="tagline">AI Coding Agent - Powered by OpenCode & GitHub Actions</p>
-    </header>
+  <!-- Header Bar -->
+  <header class="header-bar">
+    <div class="header-left">
+      <span class="header-logo">⚡</span>
+      <h1 class="header-title">ActionCode <span class="header-badge">Enterprise</span></h1>
+    </div>
+    <div class="header-center" id="header-breadcrumb"></div>
+    <div class="header-right">
+      <span class="header-status" id="connection-status">● Connected</span>
+    </div>
+  </header>
 
-    <main>
-      <div class="card">
-        <h2>Trigger AI Agent</h2>
-        <form id="trigger-form">
-          <div class="form-group">
-            <label for="github-token">GitHub Personal Access Token</label>
-            <input 
-              type="password" 
-              id="github-token" 
-              name="github-token"
-              required 
-              placeholder="ghp_xxxxxxxxxxxx"
-              autocomplete="off"
-            >
-            <small class="help-text">
-              Needs <code>repo</code> scope. 
-              <a href="https://github.com/settings/tokens" target="_blank" rel="noopener">Generate token</a>
-            </small>
-          </div>
-
-          <div class="form-group">
-            <label for="repo-url">GitHub Repository URL</label>
-            <input 
-              type="url" 
-              id="repo-url" 
-              name="repo-url"
-              required 
-              placeholder="https://github.com/user/repo"
-            >
-            <small class="help-text">Enter the full repository URL</small>
-          </div>
-
-          <div class="form-group">
-            <label for="branch">Branch</label>
-            <input 
-              type="text" 
-              id="branch" 
-              name="branch"
-              value="main"
-              placeholder="main"
-            >
-            <small class="help-text">Target branch for changes</small>
-          </div>
-
-          <div class="form-group">
-            <label for="prompt">Prompt / Instructions</label>
-            <div class="editor-container">
-              <textarea 
-                id="prompt" 
-                name="prompt"
-                rows="10" 
-                required
-                placeholder="Describe what you want to do...&#10;&#10;Examples:&#10;- Fix the bug in the login function&#10;- Add a new API endpoint for user profiles&#10;- Refactor the database connection code&#10;- Add unit tests for the payment module"
-              ></textarea>
-              <div class="editor-preview" id="preview" style="display: none;"></div>
-            </div>
-            <div class="editor-toolbar">
-              <button type="button" class="btn-small" onclick="togglePreview()">Preview</button>
-              <span class="char-count" id="char-count">0 characters</span>
+  <!-- Main Layout -->
+  <div class="main-layout">
+    <!-- Left Sidebar: Step Navigator -->
+    <nav class="sidebar" id="step-sidebar">
+      <div class="sidebar-section">
+        <div class="sidebar-title">Workflow</div>
+        <div class="step-list">
+          <div class="step-item active" data-step="1" onclick="workflow.goToStep(1)">
+            <div class="step-number">1</div>
+            <div class="step-info">
+              <div class="step-name">Configure</div>
+              <div class="step-desc">Token & Repository</div>
             </div>
           </div>
-
-          <div class="form-actions">
-            <button type="submit" id="execute-btn" class="btn-primary">
-              <span class="spinner" id="spinner" style="display: none;"></span>
-              <span id="btn-text">Execute</span>
-            </button>
+          <div class="step-connector"></div>
+          <div class="step-item" data-step="2" onclick="workflow.goToStep(2)">
+            <div class="step-number">2</div>
+            <div class="step-info">
+              <div class="step-name">Plan</div>
+              <div class="step-desc">Safety & Analysis</div>
+            </div>
           </div>
-        </form>
+          <div class="step-connector"></div>
+          <div class="step-item" data-step="3" onclick="workflow.goToStep(3)">
+            <div class="step-number">3</div>
+            <div class="step-info">
+              <div class="step-name">Execute</div>
+              <div class="step-desc">AI Agent Running</div>
+            </div>
+          </div>
+          <div class="step-connector"></div>
+          <div class="step-item" data-step="4" onclick="workflow.goToStep(4)">
+            <div class="step-number">4</div>
+            <div class="step-info">
+              <div class="step-name">Review</div>
+              <div class="step-desc">Code & Tests</div>
+            </div>
+          </div>
+          <div class="step-connector"></div>
+          <div class="step-item" data-step="5" onclick="workflow.goToStep(5)">
+            <div class="step-number">5</div>
+            <div class="step-info">
+              <div class="step-name">Summary</div>
+              <div class="step-desc">Results & PR</div>
+            </div>
+          </div>
+        </div>
       </div>
 
-      <div class="card" id="resume-section" style="display: none;">
-        <h2>Resume Previous Request</h2>
-        <form id="resume-form">
-          <div class="form-group">
-            <label for="resume-token">Resume Token</label>
-            <input 
-              type="text" 
-              id="resume-token" 
-              name="resume-token"
-              required 
-              placeholder="Enter your resume token"
-            >
-            <small class="help-text">
-              Get this from the Telegram bot or previous session
-            </small>
-          </div>
+      <div class="sidebar-section">
+        <div class="sidebar-title">Recent Tasks</div>
+        <div id="task-history" class="task-history">
+          <div class="task-history-empty">No tasks yet</div>
+        </div>
+      </div>
+    </nav>
 
-          <div class="form-actions">
-            <button type="submit" class="btn-secondary">
-              Resume
-            </button>
-          </div>
-        </form>
+    <!-- Center: Main Content -->
+    <main class="content" id="main-content">
+      <!-- Step 1: Configure -->
+      <div class="step-panel active" id="panel-1">
+        <div class="panel-header">
+          <h2>Configure Task</h2>
+          <p class="panel-subtitle">Set up your GitHub token and target repository</p>
+        </div>
+        <div class="panel-body">
+          <form id="trigger-form" class="config-form">
+            <div class="form-row">
+              <div class="form-group">
+                <label for="github-token">GitHub Personal Access Token</label>
+                <div class="input-with-status">
+                  <input type="password" id="github-token" required placeholder="ghp_xxxxxxxxxxxx" autocomplete="off">
+                  <span class="input-status" id="token-status"></span>
+                </div>
+                <small class="help-text">Needs <code>repo</code> scope. <a href="https://github.com/settings/tokens" target="_blank">Generate token</a></small>
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label for="repo-url">Repository URL</label>
+                <div class="input-with-status">
+                  <input type="url" id="repo-url" required placeholder="https://github.com/user/repo">
+                  <span class="input-status" id="repo-status"></span>
+                </div>
+              </div>
+              <div class="form-group form-group-small">
+                <label for="branch">Branch</label>
+                <input type="text" id="branch" value="main" placeholder="main">
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label for="prompt">Instruction</label>
+                <textarea id="prompt" rows="4" required placeholder="Describe what you want the AI agent to build, fix, or modify..."></textarea>
+                <div class="editor-toolbar">
+                  <span class="char-count" id="char-count">0 characters</span>
+                  <select id="safety-level" class="select-small">
+                    <option value="standard">Safety: Standard</option>
+                    <option value="strict">Safety: Strict</option>
+                    <option value="permissive">Safety: Permissive</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+            <div class="form-actions">
+              <button type="button" class="btn-secondary" onclick="workflow.runSafetyCheck()">Run Safety Check</button>
+              <button type="submit" id="execute-btn" class="btn-primary">
+                <span class="spinner" id="spinner" style="display:none"></span>
+                <span id="btn-text">Start Agent</span>
+              </button>
+            </div>
+          </form>
+          <!-- Safety check results -->
+          <div id="safety-results" class="safety-results" style="display:none"></div>
+        </div>
       </div>
 
-      <div class="card info-card">
-        <h3>How It Works</h3>
-        <ol>
-          <li>Enter your GitHub token and repository</li>
-          <li>Describe what you want to do</li>
-          <li>Click Execute to start the AI agent</li>
-          <li>Watch the progress in real-time</li>
-          <li>Get a Pull Request when complete</li>
-        </ol>
+      <!-- Step 2: Plan (Safety + Analysis) -->
+      <div class="step-panel" id="panel-2">
+        <div class="panel-header">
+          <h2>Planning & Analysis</h2>
+          <p class="panel-subtitle">Safety scan and task breakdown</p>
+        </div>
+        <div class="panel-body">
+          <div id="plan-roles" class="role-grid">
+            <div class="role-card" data-role="architect">
+              <div class="role-icon">🏗️</div>
+              <div class="role-name">Architect</div>
+              <div class="role-status">Pending</div>
+              <div class="role-output"></div>
+            </div>
+            <div class="role-card" data-role="planner">
+              <div class="role-icon">📋</div>
+              <div class="role-name">Planner</div>
+              <div class="role-status">Pending</div>
+              <div class="role-output"></div>
+            </div>
+            <div class="role-card" data-role="engineer">
+              <div class="role-icon">⚙️</div>
+              <div class="role-name">Engineer</div>
+              <div class="role-status">Pending</div>
+              <div class="role-output"></div>
+            </div>
+            <div class="role-card" data-role="reviewer">
+              <div class="role-icon">🔍</div>
+              <div class="role-name">Reviewer</div>
+              <div class="role-status">Pending</div>
+              <div class="role-output"></div>
+            </div>
+            <div class="role-card" data-role="pm">
+              <div class="role-icon">📊</div>
+              <div class="role-name">PM</div>
+              <div class="role-status">Pending</div>
+              <div class="role-output"></div>
+            </div>
+          </div>
+        </div>
       </div>
 
-      <div class="card info-card">
-        <h3>Supported Build Systems</h3>
-        <div class="build-systems">
-          <span class="badge">Maven</span>
-          <span class="badge">Gradle</span>
-          <span class="badge">npm</span>
-          <span class="badge">yarn</span>
-          <span class="badge">pnpm</span>
-          <span class="badge">Python</span>
-          <span class="badge">Go</span>
-          <span class="badge">Rust</span>
-          <span class="badge">Docker</span>
+      <!-- Step 3: Execute (Streaming) -->
+      <div class="step-panel" id="panel-3">
+        <div class="panel-header">
+          <h2>Execution</h2>
+          <p class="panel-subtitle">AI agent is working on your task</p>
+          <div class="execution-timer" id="execution-timer">00:00</div>
+        </div>
+        <div class="panel-body execute-layout">
+          <div class="execute-output" id="agent-output">
+            <div class="output-line system">⏳ Waiting for agent to start...</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Step 4: Review -->
+      <div class="step-panel" id="panel-4">
+        <div class="panel-header">
+          <h2>Review</h2>
+          <p class="panel-subtitle">Code changes and test results</p>
+        </div>
+        <div class="panel-body review-layout">
+          <div class="review-section">
+            <h3>Build & Test Results</h3>
+            <div id="build-results" class="result-cards">
+              <div class="result-card" id="build-result">
+                <div class="result-label">Build</div>
+                <div class="result-value">—</div>
+              </div>
+              <div class="result-card" id="test-result">
+                <div class="result-label">Tests</div>
+                <div class="result-value">—</div>
+              </div>
+              <div class="result-card" id="security-result">
+                <div class="result-label">Security</div>
+                <div class="result-value">—</div>
+              </div>
+            </div>
+          </div>
+          <div class="review-section">
+            <h3>Files Changed</h3>
+            <div id="files-changed" class="files-list">
+              <div class="files-empty">No files changed yet</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Step 5: Summary -->
+      <div class="step-panel" id="panel-5">
+        <div class="panel-header">
+          <h2>Summary</h2>
+          <p class="panel-subtitle">Task complete — here are the results</p>
+        </div>
+        <div class="panel-body">
+          <div id="summary-content" class="summary-content">
+            <div class="summary-placeholder">Complete a task to see the summary</div>
+          </div>
         </div>
       </div>
     </main>
 
-    <footer>
-      <p>
-        Powered by 
-        <a href="https://github.com/SiddharthMishra28/actioncode" target="_blank" rel="noopener">ActionCode</a>
-        | 
-        <a href="https://opencode.ai" target="_blank" rel="noopener">OpenCode</a>
-      </p>
-    </footer>
+    <!-- Right Panel: File Explorer + Editor -->
+    <aside class="right-panel" id="right-panel">
+      <div class="right-tabs">
+        <button class="right-tab active" data-tab="files" onclick="editor.switchTab('files')">Files</button>
+        <button class="right-tab" data-tab="editor" onclick="editor.switchTab('editor')">Editor</button>
+        <button class="right-tab" data-tab="logs" onclick="editor.switchTab('logs')">Logs</button>
+      </div>
+
+      <div class="right-content" id="files-panel">
+        <div class="file-tree" id="file-tree">
+          <div class="file-tree-empty">No files yet</div>
+        </div>
+      </div>
+
+      <div class="right-content" id="editor-panel" style="display:none">
+        <div class="editor-header" id="editor-header">
+          <span class="editor-filename">No file selected</span>
+        </div>
+        <div class="editor-body" id="editor-body">
+          <div class="editor-empty">Select a file from the tree to view its contents</div>
+        </div>
+      </div>
+
+      <div class="right-content" id="logs-panel" style="display:none">
+        <div class="logs-body" id="logs-body">
+          <div class="log-placeholder">No logs yet</div>
+        </div>
+      </div>
+    </aside>
   </div>
 
+  <!-- Status Bar -->
+  <footer class="status-bar">
+    <div class="status-left">
+      <span id="status-connection">● Connected</span>
+      <span class="status-separator">|</span>
+      <span id="status-task-id">No active task</span>
+    </div>
+    <div class="status-right">
+      <span id="status-branch"></span>
+      <span class="status-separator">|</span>
+      <span id="status-duration"></span>
+      <span class="status-separator">|</span>
+      <span>ActionCode Enterprise v2.0</span>
+    </div>
+  </footer>
+
   <script src="js/api.js"></script>
+  <script src="js/workflow.js"></script>
+  <script src="js/stream.js"></script>
+  <script src="js/editor.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>
