@@ -109,10 +109,11 @@ jobs:
 
       - name: Send Progress - Accepted
         uses: appleboy/telegram-action@v1.0.0
+        continue-on-error: true
         if: inputs.telegram_chat_id != ''
         with:
           token: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          chat_id: ${{ inputs.telegram_chat_id }}
+          to: ${{ inputs.telegram_chat_id }}
           message: |
             🟢 *Request Accepted*
             
@@ -188,10 +189,11 @@ jobs:
 
       - name: Send Progress - Checkout Complete
         uses: appleboy/telegram-action@v1.0.0
+        continue-on-error: true
         if: inputs.telegram_chat_id != ''
         with:
           token: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          chat_id: ${{ inputs.telegram_chat_id }}
+          to: ${{ inputs.telegram_chat_id }}
           message: |
             📥 Repository ${{ steps.check-empty.outputs.EMPTY == 'true' && 'Initialized (empty)' || 'Checked Out' }}
 
@@ -709,10 +711,11 @@ jobs:
 
       - name: Send Progress - PR Created
         uses: appleboy/telegram-action@v1.0.0
+        continue-on-error: true
         if: inputs.execution_mode == 'full' && steps.pr.outputs.PR_URL && steps.opencode.outputs.RATE_LIMITED != 'true'
         with:
           token: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          chat_id: ${{ inputs.telegram_chat_id }}
+          to: ${{ inputs.telegram_chat_id }}
           message: |
             🚀 *Pull Request Created*
             
@@ -721,10 +724,11 @@ jobs:
 
       - name: Send Completion Message
         uses: appleboy/telegram-action@v1.0.0
+        continue-on-error: true
         if: always() && inputs.telegram_chat_id != '' && steps.opencode.outputs.RATE_LIMITED != 'true'
         with:
           token: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          chat_id: ${{ inputs.telegram_chat_id }}
+          to: ${{ inputs.telegram_chat_id }}
           message: |
             ${{ steps.commit.outputs.COMMIT_SHA && '✅' || '❌' }} *Request ${{ steps.commit.outputs.COMMIT_SHA && 'Complete' || 'Failed' }}*
             
