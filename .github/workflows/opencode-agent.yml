@@ -105,6 +105,7 @@ jobs:
             -H "Content-Type: application/json" \
             -H "X-Webhook-Secret: ${{ secrets.WEBHOOK_SECRET }}" \
             -d "{\"request_id\":\"${REQUEST_ID}\",\"status\":\"running\"}" || true
+          bash /tmp/post-event.sh status-update system "Pipeline started — processing request"
 
       - name: Send Progress - Accepted
         uses: appleboy/telegram-action@v1.0.0
@@ -506,6 +507,7 @@ jobs:
             -H "Content-Type: application/json" \
             -H "X-Webhook-Secret: ${{ secrets.WEBHOOK_SECRET }}" \
             -d "{\"request_id\":\"${REQUEST_ID}\",\"status\":\"building\"}" || true
+          bash /tmp/post-event.sh status-update system "Code modification complete — building project"
 
       - name: Event - Engineer Complete
         if: always() && env.CALLBACK_URL != '' && steps.opencode.outputs.RATE_LIMITED != 'true'
@@ -542,6 +544,7 @@ jobs:
             -H "Content-Type: application/json" \
             -H "X-Webhook-Secret: ${{ secrets.WEBHOOK_SECRET }}" \
             -d "{\"request_id\":\"${REQUEST_ID}\",\"status\":\"testing\"}" || true
+          bash /tmp/post-event.sh status-update system "Build complete — running tests"
 
       - name: Run Tests
         id: test
@@ -634,6 +637,7 @@ jobs:
             -H "Content-Type: application/json" \
             -H "X-Webhook-Secret: ${{ secrets.WEBHOOK_SECRET }}" \
             -d "{\"request_id\":\"${REQUEST_ID}\",\"status\":\"creating-pr\"}" || true
+          bash /tmp/post-event.sh status-update system "Tests passed — creating pull request"
 
       - name: Create Pull Request
         id: pr
@@ -745,20 +749,16 @@ jobs:
       - name: Send Logs to Worker
         if: always() && env.CALLBACK_URL != ''
         run: |
-          # Collect log lines and send to Worker
-          LOG_LINES=""
+          # Post log events to Worker's events endpoint
           if [ -f /tmp/opencode-output.txt ]; then
-            LOG_LINES=$(cat /tmp/opencode-output.txt | head -50 | sed 's/"/\\"/g' | tr '\n' '|' | sed 's/|$//')
+            while IFS= read -r line; do
+              [ -z "$line" ] && continue
+              ESCAPED=$(echo "$line" | sed 's/"/\\"/g' | head -c 500)
+              bash /tmp/post-event.sh log agent "$ESCAPED"
+            done < /tmp/opencode-output.txt | head -30
           fi
-          # Also collect workflow step outputs
-          STEP_LOGS=""
-          for step_name in "Checkout" "Setup" "Analyze" "Execute" "Build" "Test" "Commit" "PR"; do
-            STEP_LOGS="${STEP_LOGS}[${step_name}] Completed\n"
-          done
-          curl -s -X POST "${CALLBACK_URL}/webhook/github" \
-            -H "Content-Type: application/json" \
-            -H "X-Webhook-Secret: ${{ secrets.WEBHOOK_SECRET }}" \
-            -d "{\"request_id\":\"${REQUEST_ID}\",\"status\":\"${{ steps.commit.outputs.COMMIT_SHA && 'completed' || 'failed' }}\",\"logs\":\"$(echo -e "$STEP_LOGS" | head -20 | sed 's/"/\\"/g' | tr '\n' '|')\"}" || true
+          # Post final log event
+          bash /tmp/post-event.sh log system "Workflow execution complete"
 
       - name: Callback - Final Status
         if: always() && env.CALLBACK_URL != '' && steps.opencode.outputs.RATE_LIMITED != 'true'

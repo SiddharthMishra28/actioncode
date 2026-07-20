@@ -1,69 +1,57 @@
 // SSE Event Stream — real-time updates from the Worker
 const stream = {
-  eventSource: null,
   requestId: null,
   events: [],
-  currentPhase: null,
+  lastEventCount: 0,
+  _pollTimer: null,
+  _statusTimer: null,
 
   connect(requestId) {
     this.disconnect();
     this.requestId = requestId;
     this.events = [];
+    this.lastEventCount = 0;
 
-    // Try SSE first, fall back to polling
-    const url = `${API_CONFIG.WORKER_URL}/api/events/${requestId}`;
-    try {
-      this.eventSource = new EventSource(url);
-      this.eventSource.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data);
-          this.handleEvent(data);
-        } catch {}
-      };
-      this.eventSource.onerror = () => {
-        console.warn('SSE error, using polling');
-        this.eventSource.close();
-        this.eventSource = null;
-        this.startPolling();
-      };
-    } catch {
-      this.startPolling();
-    }
+    // Poll events every 2s
+    this._pollTimer = setInterval(() => this.pollEvents(), 2000);
+    this.pollEvents();
 
-    // Always poll status as backup (every 3s)
-    this._statusTimer = setInterval(async () => {
-      try {
-        const result = await api.getStatus(requestId);
-        if (result.success && result.data) {
-          this.handleStatusUpdate(result.data);
-        }
-      } catch {}
-    }, 3000);
-  },
-
-  startPolling() {
-    if (this._pollTimer) return;
-    this._pollTimer = setInterval(async () => {
-      try {
-        const result = await api.getEvents(this.requestId);
-        if (result.success && result.data && result.data.notifications) {
-          const newEvents = result.data.notifications.slice(this.events.length);
-          for (const evt of newEvents) {
-            try {
-              const parsed = typeof evt === 'string' ? JSON.parse(evt) : evt;
-              this.handleEvent(parsed);
-              this.events.push(parsed);
-            } catch {}
-          }
-        }
-      } catch {}
-    }, 2000);
+    // Poll status every 3s
+    this._statusTimer = setInterval(() => this.pollStatus(), 3000);
+    this.pollStatus();
   },
 
   disconnect() {
-    if (this.eventSource) { this.eventSource.close(); this.eventSource = null; }
-    if (this._statusTimer) { clearInterval(this._statusTimer); this._statusTimer = null; }
     if (this._pollTimer) { clearInterval(this._pollTimer); this._pollTimer = null; }
+    if (this._statusTimer) { clearInterval(this._statusTimer); this._statusTimer = null; }
+  },
+
+  async pollEvents() {
+    if (!this.requestId) return;
+    try {
+      const result = await api.getEvents(this.requestId);
+      if (result.success && result.data && result.data.events) {
+        const events = result.data.events;
+        // Process only new events
+        while (this.lastEventCount < events.length) {
+          const evt = events[this.lastEventCount];
+          this.handleEvent(evt);
+          this.lastEventCount++;
+        }
+      }
+    } catch (e) {
+      console.warn('Event poll error:', e);
+    }
+  },
+
+  async pollStatus() {
+    if (!this.requestId) return;
+    try {
+      const result = await api.getStatus(this.requestId);
+      if (result.success && result.data) {
+        this.handleStatusUpdate(result.data);
+      }
+    } catch {}
   },
 
   handleEvent(event) {
@@ -77,25 +65,27 @@ const stream = {
       case 'status-update': this.onStatusUpdate(event.data); break;
       case 'summary': this.onSummary(event.data); break;
       case 'error': this.onError(event.data); break;
-      case 'stream-end': this.onStreamEnd(); break;
+      case 'log': this.onLog(event.data); break;
     }
   },
 
-  // ── Log Event to Logs Panel ──
+  // ── Log to Logs Panel ──
   logEvent(event) {
     const container = document.getElementById('logs-body');
     if (!container) return;
-    // Clear placeholder
     const placeholder = container.querySelector('.log-placeholder');
     if (placeholder) placeholder.remove();
 
     const time = new Date(event.timestamp || Date.now()).toLocaleTimeString();
+    const type = event.type || 'unknown';
+    const msg = this.formatLogMessage(event);
+
     const entry = document.createElement('div');
     entry.className = 'log-entry';
     entry.innerHTML = `
       <span class="log-time">${time}</span>
-      <span class="log-type ${event.type}">${event.type}</span>
-      <span class="log-msg">${this.formatLogMessage(event)}</span>
+      <span class="log-type ${type}">${this.formatTypeName(type)}</span>
+      <span class="log-msg">${this.escapeHtml(msg)}</span>
     `;
     container.appendChild(entry);
     container.scrollTop = container.scrollHeight;
@@ -105,17 +95,32 @@ const stream = {
     const d = event.data || {};
     switch (event.type) {
       case 'role-start': return `Starting ${d.role || 'unknown'} phase`;
-      case 'role-complete': return `${d.role || 'unknown'} phase complete${d.output ? ': ' + d.output.slice(0, 100) : ''}`;
+      case 'role-complete': return `${d.role || 'unknown'} complete${d.output ? ': ' + String(d.output).slice(0, 120) : ''}`;
       case 'thought': return d.message || d.text || JSON.stringify(d).slice(0, 200);
       case 'code-change': return `Code: ${(d.code || d.diff || '').slice(0, 150)}`;
-      case 'file-create': return `Created: ${d.path || 'unknown'}`;
-      case 'status-update': return `Status: ${d.status || 'unknown'}`;
-      case 'error': return `Error: ${d.message || d.error || 'Unknown'}`;
+      case 'file-create': return `Created: ${d.path || ''}`;
+      case 'status-update': return `Status: ${d.status || ''}`;
+      case 'log': return d.message || d.line || JSON.stringify(d).slice(0, 150);
+      case 'error': return `Error: ${d.message || d.error || ''}`;
       default: return JSON.stringify(d).slice(0, 200);
     }
   },
 
-  // ── Status Update Handler ──
+  formatTypeName(type) {
+    const names = {
+      'role-start': 'PHASE', 'role-complete': 'DONE',
+      'thought': 'THINK', 'code-change': 'CODE',
+      'file-create': 'FILE', 'status-update': 'STATUS',
+      'log': 'LOG', 'error': 'ERR',
+    };
+    return names[type] || type.slice(0, 4).toUpperCase();
+  },
+
+  escapeHtml(str) {
+    return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  },
+
+  // ── Status Update ──
   handleStatusUpdate(data) {
     // Update role cards
     if (data.roles) {
@@ -127,9 +132,7 @@ const stream = {
             role.status === 'completed' ? '✓ Complete' :
             role.status === 'running' ? '⏳ Running...' :
             role.status === 'failed' ? '✗ Failed' : 'Pending';
-          if (role.output) {
-            card.querySelector('.role-output').textContent = role.output.slice(0, 200);
-          }
+          if (role.output) card.querySelector('.role-output').textContent = String(role.output).slice(0, 200);
         }
       });
     }
@@ -137,20 +140,14 @@ const stream = {
     // Update build/test results
     if (data.buildSuccess !== undefined) {
       const el = document.getElementById('build-result');
-      if (el) {
-        el.className = `result-card ${data.buildSuccess ? 'passed' : 'failed'}`;
-        el.querySelector('.result-value').textContent = data.buildSuccess ? '✓ Passed' : '✗ Failed';
-      }
+      if (el) { el.className = `result-card ${data.buildSuccess ? 'passed' : 'failed'}`; el.querySelector('.result-value').textContent = data.buildSuccess ? '✓ Passed' : '✗ Failed'; }
     }
     if (data.testSuccess !== undefined) {
       const el = document.getElementById('test-result');
-      if (el) {
-        el.className = `result-card ${data.testSuccess ? 'passed' : 'failed'}`;
-        el.querySelector('.result-value').textContent = data.testSuccess ? '✓ Passed' : '✗ Failed';
-      }
+      if (el) { el.className = `result-card ${data.testSuccess ? 'passed' : 'failed'}`; el.querySelector('.result-value').textContent = data.testSuccess ? '✓ Passed' : '✗ Failed'; }
     }
 
-    // Update files changed
+    // Update files
     if (data.modifiedFiles && data.modifiedFiles.length > 0) {
       const container = document.getElementById('files-changed');
       if (container) {
@@ -178,22 +175,15 @@ const stream = {
     }
   },
 
-  // ── Role Handlers ──
+  // ── Event Handlers ──
   onRoleStart(data) {
     const role = data.role || 'unknown';
     const phaseMap = { architect: 2, planner: 2, engineer: 3, tester: 4, reviewer: 5, documenter: 5, pm: 6 };
-    const step = phaseMap[role] || 3;
-    workflow.setStep(step);
-    this.currentPhase = role;
+    workflow.setStep(phaseMap[role] || 3);
 
-    // Highlight role card
     const card = document.querySelector(`.role-card[data-role="${role}"]`);
-    if (card) {
-      card.className = 'role-card running';
-      card.querySelector('.role-status').textContent = '⏳ Running...';
-    }
+    if (card) { card.className = 'role-card running'; card.querySelector('.role-status').textContent = '⏳ Running...'; }
 
-    // Add phase header to output
     this.appendPhaseHeader(role);
   },
 
@@ -203,30 +193,19 @@ const stream = {
     if (card) {
       card.className = 'role-card completed';
       card.querySelector('.role-status').textContent = '✓ Complete';
-      if (data.output) {
-        card.querySelector('.role-output').textContent = data.output.slice(0, 200);
-      }
+      if (data.output) card.querySelector('.role-output').textContent = String(data.output).slice(0, 200);
     }
   },
 
-  onThought(data) {
-    this.appendOutput('thought', data.message || data.text || JSON.stringify(data));
-  },
-
-  onCodeChange(data) {
-    this.appendOutput('code', data.code || data.diff || JSON.stringify(data));
-  },
-
+  onThought(data) { this.appendOutput('thought', data.message || data.text || JSON.stringify(data)); },
+  onCodeChange(data) { this.appendOutput('code', data.code || data.diff || JSON.stringify(data)); },
   onFileCreate(data) {
     this.appendOutput('file', `Created: ${data.path}`);
-    if (data.content) {
-      editor.addFile(data.path, data.content);
-    }
+    if (data.content) editor.addFile(data.path, data.content);
   },
-
+  onLog(data) { this.appendOutput('log', data.message || data.line || JSON.stringify(data)); },
   onSummary(data) { this.showSummary(data); },
   onError(data) { this.appendOutput('error', `Error: ${data.message || data.error || 'Unknown'}`); },
-  onStreamEnd() { this.disconnect(); },
 
   // ── Output Helpers ──
   appendPhaseHeader(role) {
@@ -247,14 +226,10 @@ const stream = {
     const line = document.createElement('div');
     line.className = `output-line ${type === 'code' ? 'code-block' : ''}`;
     const time = new Date().toLocaleTimeString();
-    const badges = { thought: 'THOUGHT', code: 'CODE', file: 'FILE', error: 'ERROR', status: 'STATUS' };
+    const badges = { thought: 'THOUGHT', code: 'CODE', file: 'FILE', error: 'ERROR', status: 'STATUS', log: 'LOG' };
     line.innerHTML = `<span class="output-time">${time}</span><span class="output-badge ${type}">${badges[type] || type.toUpperCase()}</span><span class="output-text">${this.escapeHtml(text)}</span>`;
     container.appendChild(line);
     container.scrollTop = container.scrollHeight;
-  },
-
-  escapeHtml(str) {
-    return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   },
 
   // ── Summary ──
@@ -263,24 +238,24 @@ const stream = {
     workflow.setStep(6);
     const container = document.getElementById('summary-content');
     if (!container) return;
-    const isSuccess = data.status === 'completed';
-    const duration = workflow.getDuration();
+    const ok = data.status === 'completed';
+    const dur = workflow.getDuration();
 
     container.innerHTML = `
       <div class="summary-header">
-        <div class="summary-icon">${isSuccess ? '🎉' : '❌'}</div>
-        <div class="summary-title ${isSuccess ? 'success' : 'failed'}">${isSuccess ? 'Task Completed Successfully' : 'Task Failed'}</div>
+        <div class="summary-icon">${ok ? '🎉' : '❌'}</div>
+        <div class="summary-title ${ok ? 'success' : 'failed'}">${ok ? 'Task Completed Successfully' : 'Task Failed'}</div>
       </div>
       <div class="summary-stats">
-        <div class="summary-stat"><div class="stat-value">${duration}</div><div class="stat-label">Duration</div></div>
+        <div class="summary-stat"><div class="stat-value">${dur}</div><div class="stat-label">Duration</div></div>
         <div class="summary-stat"><div class="stat-value">${data.modifiedFiles?.length || 0}</div><div class="stat-label">Files Changed</div></div>
         <div class="summary-stat"><div class="stat-value">${data.commitSha ? data.commitSha.slice(0, 7) : '—'}</div><div class="stat-label">Commit</div></div>
       </div>
       ${data.repository ? `<div class="summary-section"><h3>Details</h3><ul>
-        <li><strong>Repository:</strong> <a href="https://github.com/${data.repository}" target="_blank" style="color:var(--primary)">${data.repository}</a></li>
+        <li><strong>Repository:</strong> <a href="https://github.com/${data.repository}" target="_blank" style="color:#3b82f6">${data.repository}</a></li>
         <li><strong>Branch:</strong> ${data.branch || 'main'}</li>
         <li><strong>Task ID:</strong> ${data.id || workflow.requestId}</li>
-        ${data.commitSha ? `<li><strong>Commit:</strong> <a href="https://github.com/${data.repository}/commit/${data.commitSha}" target="_blank" style="color:var(--primary)">${data.commitSha.slice(0, 7)}</a></li>` : ''}
+        ${data.commitSha ? `<li><strong>Commit:</strong> <a href="https://github.com/${data.repository}/commit/${data.commitSha}" target="_blank" style="color:#3b82f6">${data.commitSha.slice(0, 7)}</a></li>` : ''}
       </ul></div>` : ''}
       ${data.modifiedFiles?.length > 0 ? `<div class="summary-section"><h3>Files (${data.modifiedFiles.length})</h3><ul>${data.modifiedFiles.map(f => `<li>📄 ${f}</li>`).join('')}</ul></div>` : ''}
       ${data.prUrl ? `<a class="summary-link" href="${data.prUrl}" target="_blank">View Pull Request →</a>` : ''}
