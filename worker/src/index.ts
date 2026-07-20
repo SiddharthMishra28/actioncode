@@ -11,7 +11,7 @@ import {
   handleSafetyCheck,
 } from './handlers/api';
 import { handleResumeSave, handleResumeGet } from './handlers/resume';
-import { handleEventsStream, handleEventPost } from './handlers/events';
+import { handleEventsStream, handleEventsJson, handleEventPost } from './handlers/events';
 import { handleFilesList, handleFileContent } from './handlers/files';
 import { createCorsResponse, createApiResponse } from './utils/validation';
 
@@ -59,6 +59,12 @@ export default {
         case path.startsWith('/api/logs/') && method === 'GET': {
           const logsId = path.split('/api/logs/')[1];
           return handleLogsRequest(request, env, logsId);
+        }
+
+        // Events JSON (for polling)
+        case path.startsWith('/api/events/') && path.endsWith('/json') && method === 'GET': {
+          const eventId = path.split('/api/events/')[1].replace('/json', '');
+          return handleEventsJson(env, eventId);
         }
 
         // SSE events stream

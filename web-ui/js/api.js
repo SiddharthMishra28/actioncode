@@ -42,7 +42,7 @@ const api = {
   },
 
   async getEvents(requestId) {
-    return this.request(`/api/events/${requestId}`);
+    return this.request(`/api/events/${requestId}/json`);
   },
 
   async getFiles(requestId) {
